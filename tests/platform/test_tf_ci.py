@@ -35,7 +35,9 @@ case "$1" in
 esac
 case "$1" in
   init) exit 0 ;;
-  plan) echo "Plan: 2 to add, 0 to change, 0 to destroy."; exit 2 ;;
+  plan)
+    printf %s "${TF_VAR_service_image:-}" >"$STUB_DIR/service_image"
+    echo "Plan: 2 to add, 0 to change, 0 to destroy."; exit 2 ;;
   show) cat "$STUB_PLAN_JSON" ;;
   apply) touch "$STUB_DIR/applied"; echo "Apply complete! Resources: 2 added, 0 changed, 0 destroyed." ;;
   output) echo 'service_url = "http://idp-dev.example"'; echo 'account_id = "111111111111"' ;;
@@ -165,3 +167,58 @@ def test_fails_closed_on_a_non_plan_document(stub, bad_plan):
     result = stub("apply", plan=bad_plan, EXPECTED_DIGEST=empty_input_sha256)
     assert result.returncode == 1
     assert not (stub.dir / "applied").exists()
+
+
+# --- Initial image and the "never delete the running service" guard ---------------------------
+DIGEST = "sha256:" + "ab" * 32
+
+
+def test_initial_image_is_composed_from_this_account_and_the_manifest(stub):
+    result = stub("plan", SERVICE_IMAGE_DIGEST=DIGEST)
+    assert result.returncode == 0, result.stdout
+    assert (
+        stub.dir / "service_image"
+    ).read_text() == f"{ACCOUNT}.dkr.ecr.us-east-2.amazonaws.com/idp/sample-api@{DIGEST}"
+
+
+def test_no_initial_image_means_infrastructure_only(stub):
+    assert stub("plan").returncode == 0
+    assert (stub.dir / "service_image").read_text() == ""
+
+
+@pytest.mark.parametrize("bad", ["latest", "sha256:" + "AB" * 32, "sha256:abc", DIGEST + "0"])
+def test_initial_image_must_be_a_digest(stub, bad):
+    result = stub("plan", SERVICE_IMAGE_DIGEST=bad)
+    assert result.returncode == 2
+    assert "SERVICE_IMAGE_DIGEST must be" in result.stdout
+
+
+def _with_change(address: str, actions: list[str]) -> dict:
+    plan = json.loads(json.dumps(PLAN))
+    plan["resource_changes"].append(
+        {"address": address, "change": {"actions": actions, "after": {}, "after_unknown": {}}}
+    )
+    return plan
+
+
+@pytest.mark.parametrize("actions", [["delete"], ["delete", "create"], ["create", "delete"]])
+def test_refuses_a_plan_that_deletes_the_running_service(stub, actions):
+    plan = _with_change("module.service[0].aws_ecs_service.this", actions)
+    result = stub("plan", plan=plan)
+    assert result.returncode == 1
+    assert "would DELETE the running ECS service" in result.stdout
+    result = stub("apply", plan=plan, EXPECTED_DIGEST="0" * 64)
+    assert result.returncode == 1
+    assert not (stub.dir / "applied").exists()
+
+
+@pytest.mark.parametrize(
+    ("address", "actions"),
+    [
+        ("module.service[0].aws_ecs_service.this", ["create"]),  # first release
+        ("module.service[0].aws_ecs_service.this", ["update"]),
+        ("module.service[0].aws_ecs_task_definition.this", ["delete", "create"]),  # config change
+    ],
+)
+def test_allows_creating_updating_and_new_task_definitions(stub, address, actions):
+    assert stub("plan", plan=_with_change(address, actions)).returncode == 0

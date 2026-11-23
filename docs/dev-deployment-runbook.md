@@ -7,7 +7,7 @@ changes. Every apply needs a reviewed plan and your approval of the `dev` enviro
 |---|---|
 | Prerequisites | Phase 3 bootstrap applied and verified (`verify_bootstrap.sh`: all PASS); GitHub environments configured (`verify_github_settings.sh`: all PASS) |
 | Creates (infrastructure only) | VPC (2 AZs, public + private subnets, no NAT), flow logs, ALB (HTTP from your /32 only), target group, ECS cluster, SNS alerts + e-mail subscription, 4 alarms, ECS deployment-event rule + log group, dashboard |
-| Not yet | The ECS **service**: it is created once Phase 5 publishes a digest-pinned image (`SERVICE_IMAGE`). Until then the ALB answers `503`. That is expected |
+| Not yet | The ECS **service**: it is created once Phase 5 publishes a digest-pinned image (`SERVICE_IMAGE_DIGEST`, [release-runbook.md](release-runbook.md)). Until then the ALB answers `503`. That is expected |
 | Cost while it exists | ALB ≈ $0.0225/h + 2 public IPv4 ≈ $0.010/h, so **≈ $0.03/hour ≈ $0.80/day**. Everything else is free or cents. Tear down after the demo (Phase 7 `cleanup.yml`) |
 
 ## 0. One-time: give the plan job its inputs

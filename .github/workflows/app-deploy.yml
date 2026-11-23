@@ -1,0 +1,63 @@
+# Release a published image to the dev ECS service (Phase 5).
+#
+#   1. Take the image DIGEST from an image-build run summary (tags are refused).
+#   2. Run this workflow with it, then approve the `dev-deploy` environment (required reviewer,
+#      main only). Only then can the job assume the deploy role (`idp-dev-github-deploy`, trust =
+#      environment:dev-deploy), which can register task definitions and update services in the
+#      idp-dev cluster, and nothing else: no Terraform state, no infrastructure, no IAM changes.
+#   3. scripts/app_deploy.sh registers a revision with ONLY the image changed, waits for that
+#      deployment to COMPLETE (a circuit-breaker rollback fails the job) and checks target health.
+#
+# Rollback = run this workflow with the previous digest (docs/release-runbook.md).
+name: app-deploy
+
+# checkov:skip=CKV_GHA_7:image_digest is the release selector, validated as sha256:<64 hex> and checked against ECR; it does not change what the build runs.
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: Image digest from the image-build summary (sha256:<64 hex>)
+        type: string
+        required: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: app-deploy-dev # one release at a time
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy sample-api (dev, approved)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dev-deploy # required reviewer approves before this job receives credentials
+    permissions:
+      contents: read
+      id-token: write # OIDC: the deploy role trusts only environment:dev-deploy
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      IMAGE_DIGEST: ${{ inputs.image_digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install manifest renderer dependencies
+        run: python -m pip install --disable-pip-version-check jsonschema==4.26.0 PyYAML==6.0.3
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: idp-dev-deploy-${{ github.run_id }}
+          mask-aws-account-id: true
+      - name: Deploy the digest and verify the rollout
+        run: scripts/app_deploy.sh dev

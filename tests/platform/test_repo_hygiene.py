@@ -205,17 +205,31 @@ def _aws_jobs():
 
 
 def test_aws_workflows_exist():
-    assert {p.name for p, *_ in _aws_jobs()} >= {"terraform-plan.yml", "terraform-apply.yml"}
+    assert {p.name for p, *_ in _aws_jobs()} == {
+        "terraform-plan.yml",
+        "terraform-apply.yml",
+        "image-build.yml",
+        "app-deploy.yml",
+    }
 
 
 @pytest.mark.parametrize(("path", "wf", "name", "job"), list(_aws_jobs()), ids=lambda v: getattr(v, "name", None))
 def test_aws_jobs_are_gated(path, wf, name, job):
     where = f"{path.name}/{name}"
-    # A protected environment: the OIDC trust names it, and GitHub enforces reviewers/branches on it.
-    assert job.get("environment") in {"dev-plan", "dev", "dev-deploy"}, f"{where}: must run in a protected environment"
     assert job.get("if") == "github.ref == 'refs/heads/main'", f"{where}: must be limited to main"
     triggers = set(wf["on"]) if isinstance(wf["on"], dict) else {wf["on"]}
-    assert triggers <= {"workflow_dispatch", "schedule"}, f"{where}: AWS workflows are manual (or scheduled) only"
+    if path.name == "image-build.yml":
+        # The one exception: publishing (not deploying) an image after a reviewed merge to main. Its
+        # role trusts ref:refs/heads/main only and can push to ECR, nothing else.
+        assert "environment" not in job, where
+        assert triggers <= {"push", "workflow_dispatch"}, where
+        assert wf["on"]["push"]["branches"] == ["main"], f"{where}: pushes to main only"
+    else:
+        # A protected environment: the OIDC trust names it, and GitHub enforces reviewers/branches on it.
+        assert job.get("environment") in {"dev-plan", "dev", "dev-deploy"}, (
+            f"{where}: must run in a protected environment"
+        )
+        assert triggers <= {"workflow_dispatch", "schedule"}, f"{where}: AWS workflows are manual (or scheduled) only"
     creds = [s for s in job["steps"] if str(s.get("uses", "")).startswith("aws-actions/configure-aws-credentials@")]
     assert len(creds) == 1, f"{where}: exactly one credentials step"
     assert creds[0]["with"].get("mask-aws-account-id") is True, f"{where}: mask the account ID in public logs"
@@ -234,6 +248,34 @@ def test_apply_requires_the_reviewed_digest():
     assert "upload-artifact" not in (ROOT / ".github" / "workflows" / "terraform-plan.yml").read_text(), (
         "plan files contain plaintext variables: never upload them from a public repository"
     )
+
+
+def test_image_is_pushed_only_after_smoke_test_and_trivy_gate():
+    job = load_workflow(ROOT / ".github" / "workflows" / "image-build.yml")["jobs"]["build"]
+    names = [s.get("name") or s.get("uses", "") for s in job["steps"]]
+    creds = next(i for i, s in enumerate(job["steps"]) if "configure-aws-credentials" in s.get("uses", ""))
+    smoke = next(i for i, n in enumerate(names) if n.startswith("Smoke test"))
+    gate = next(i for i, s in enumerate(job["steps"]) if s.get("with", {}).get("exit-code") == "1")
+    assert smoke < creds and gate < creds, "no AWS credentials before the image passed its gates"
+    assert job["steps"][gate]["with"]["severity"] == "HIGH,CRITICAL"
+    assert job["steps"][creds]["with"]["role-to-assume"] == "${{ vars.AWS_IMAGE_PUSH_ROLE_ARN }}"
+    assert any(s.get("run") == "scripts/push_image.sh" for s in job["steps"][creds:])
+
+
+def test_deploy_requires_a_digest_and_the_deploy_environment():
+    wf = load_workflow(ROOT / ".github" / "workflows" / "app-deploy.yml")
+    assert wf["on"]["workflow_dispatch"]["inputs"]["image_digest"]["required"] is True
+    job = wf["jobs"]["deploy"]
+    assert job["environment"] == "dev-deploy"
+    assert job["env"]["IMAGE_DIGEST"] == "${{ inputs.image_digest }}"
+    assert any(s.get("run") == "scripts/app_deploy.sh dev" for s in job["steps"])
+
+
+def test_terraform_workflows_pass_the_initial_image_digest_only():
+    for name in ("terraform-plan.yml", "terraform-apply.yml"):
+        env = next(iter(load_workflow(ROOT / ".github" / "workflows" / name)["jobs"].values()))["env"]
+        assert env["SERVICE_IMAGE_DIGEST"] == "${{ vars.SERVICE_IMAGE_DIGEST }}", name
+        assert "SERVICE_IMAGE" not in env, name
 
 
 CIDR = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})/\d{1,2}(?![\d.])")

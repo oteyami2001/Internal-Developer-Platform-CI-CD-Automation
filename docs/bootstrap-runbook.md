@@ -93,14 +93,25 @@ message**. Never try to work around an SCP.
 terraform apply -input=false bootstrap.tfplan
 ```
 
+Run it **once**. A second run reports `Saved plan is stale` and changes nothing: the plan was
+already applied.
+
 If the apply stops partway (for example on an SCP deny), the created resources stay in the local
 state. Re-running steps 5–6 continues from there; nothing is created twice.
 
 ## 7. Move the bootstrap state into S3
 
 ```bash
-cp backend.tf.example backend.tf && terraform init -input=false -migrate-state -backend-config="bucket=$(terraform output -raw state_bucket)"
+B="idp-tfstate-$(aws sts get-caller-identity --query Account --output text)-us-east-2" && cp backend.tf.example backend.tf && terraform init -migrate-state -force-copy -backend-config="bucket=$B" && aws s3 ls "s3://$B/bootstrap/"
 ```
+
+Expected: `Successfully configured the backend "s3"!` and a listing that ends in `terraform.tfstate`.
+
+Lessons from the first real run (2026-11-23), all recoverable because the local state stays
+untouched until a migration succeeds:
+- Build the bucket name from the account ID. `terraform output` fails once `backend.tf` exists.
+- Without `-backend-config`, Terraform *prompts for the bucket name*. Typing `yes` there makes it try a bucket named "yes".
+- `-input=false` is refused for a migration. `-force-copy` is the non-interactive approval.
 
 Answer `yes`. Then confirm the state is in S3:
 

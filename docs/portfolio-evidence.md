@@ -3,10 +3,51 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
-## Phase 4 — Dev infrastructure (code, 2026-11-23)
+## Phase 5 — Delivery pipeline (code, 2026-11-23)
 
-Code and offline tests only. **Nothing is applied**: that needs the Phase 3 bootstrap in AWS
-and the owner's approval ([dev-deployment-runbook.md](dev-deployment-runbook.md)).
+Approved by the owner 2026-11-23. Code and offline tests only so far: **no image has been pushed
+and nothing has been deployed yet** ([release-runbook.md](release-runbook.md)).
+
+| # | Check | Result |
+|---|---|---|
+| P5-1 | `scripts/app_deploy.sh` (`test_app_deploy.py`, stubbed AWS CLI): digest-only input, refused before any AWS call otherwise; account guard; image must be in ECR; never creates a missing service; only the image changes in the new revision (hardened settings, roles and tags verified); circuit-breaker rollback, timeout, wrong PRIMARY and zero healthy targets each fail the job | ✅ 15/15 |
+| P5-2 | `scripts/push_image.sh` (`test_push_image.py`): immutable commit tag, digest published, a re-run never overwrites, registry password only via stdin | ✅ 4/4 |
+| P5-3 | `scripts/tf_ci.sh` additions: the initial image is composed from this account + the manifest and must be `sha256:<64 hex>`; a plan that deletes or replaces the running ECS service is refused (plan and apply); task-definition replacement still allowed | ✅ 12 new (23/23 total) |
+| P5-4 | Workflow rules: image pushed only after smoke test + Trivy gate (step order); image-build is the only AWS job without an environment (push to `main` only, push role); app-deploy requires a digest and `dev-deploy`; Terraform workflows pass only `SERVICE_IMAGE_DIGEST` | ✅ 5 new rules + 14 generic cases for the 2 new workflows |
+| P5-5 | Mutation testing: rollout state, PRIMARY check, target-health check, image-only change, service existence, digest format, service-delete guard each removed in turn | ✅ 7/7 caught |
+| P5-6 | Ruff · Bandit · actionlint · zizmor · shellcheck · Checkov `github_actions` + `secrets` | ✅ clean · Checkov 298 passed, 0 failed |
+
+**Defect found while building Phase 5 (and fixed):** the rollout timer started before the ECR and
+ECS checks, so on a slow runner the wait loop could end without polling even once. It showed up as
+a flaky timeout test. The timer now starts at `update-service`, and the loop always polls at
+least once.
+
+**Design decisions:**
+- The runner does not probe `/health`, because the ALB admits only the operator /32 (SE-2). Verification is the
+  deployment's own `rolloutState` (not "services-stable", which also passes after a rollback),
+  the PRIMARY revision, and ALB target health, which probes `/health`.
+- ECR's scan on push is reported, not gated: it also lists vulnerabilities with no fix yet. The
+  gate is Trivy before the push.
+
+## Phase 4 — Dev infrastructure (2026-11-23)
+
+### AWS apply (☁️ AWS-verified)
+
+Run through GitHub Actions with OIDC from `main`; the apply was approved by the owner in the `dev`
+environment. Account ID masked in the logs.
+
+| # | Step | Evidence | Result |
+|---|---|---|---|
+| P4-A1 | `terraform-plan` run [45120116740](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45120116740) | `Plan: 37 to add, 0 to change, 0 to destroy.` Matches the expected count (network 18, load balancer 4, cluster 2, observability 13; no service, because no image exists yet) | ✅ |
+| P4-A2 | `terraform-apply` run [45121248014](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45121248014), 06:02–06:05 | Reviewed digest `76bb2470…a76ee` re-computed and matched; `Apply complete! Resources: 37 added, 0 changed, 0 destroyed.` | ✅ |
+| P4-A3 | Outputs | ALB `idp-dev-216884465.us-east-2.elb.amazonaws.com`, cluster and dashboard `idp-dev`, log group `/aws/events/idp-dev/ecs-deployments`, `service_deployed = false` | ✅ |
+| P4-A4 | SNS alert subscription | Confirmed by the owner from the e-mail | ✅ |
+| P4-A5 | Drift check: `terraform-plan` run [45121998148](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45121998148), 06:07:32–06:07:52 | `No changes. Your infrastructure matches the configuration.` | ✅ |
+| P4-A6 | ALB reachability from the sandbox (not the allowed /32) | Connection timed out. Consistent with the security group, but **not proof** of correct behaviour | ⚠️ inconclusive |
+| P4-A6b | CloudWatch alarms in the console (owner screenshot, ~06:12) | 4 alarms (`idp-dev-latency-p95`, `-target-5xx`, `-alb-5xx`, `-unhealthy-targets`): all `OK`, 0 in alarm, 0 insufficient data | ✅ |
+| P4-A7 | ALB `/health` from the operator's allowed IP in a browser (owner screenshot, ~06:15) | `503 Service Temporarily Unavailable`, as expected: the listener answers, and there are no targets until Phase 5 | ✅ |
+
+### Code and offline tests
 
 | # | Check | Result |
 |---|---|---|
@@ -78,7 +119,19 @@ PASS     environment dev-plan deploys only from main
 (The `main` ruleset, secret scanning, Dependabot and Actions-token checks also still PASS. The OIDC
 subject is unchanged: immutable prefix `repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837`.)
 
-⏳ Pending: owner runs [bootstrap-runbook.md](bootstrap-runbook.md) steps 3–8 in CloudShell. Record
+**Bootstrap applied and AWS-verified ☁️** (owner, AWS CloudShell us-east-2, 2026-11-23):
+
+- `terraform apply bootstrap.tfplan`: **`Apply complete! Resources: 28 added, 0 changed, 0 destroyed.`** (~05:21 UTC; the S3 lifecycle configurations took 56 s).
+- Outputs match the design: four roles, each trusting exactly one immutable OIDC subject (`…@1465573837:environment:dev-plan`, `:environment:dev`, `:environment:dev-deploy`, `:ref:refs/heads/main`), boundary `idp-dev-workload-boundary`, ECR `idp/sample-api`, trail `idp-management-events`.
+- State migrated to `s3://idp-tfstate-<account>-us-east-2/bootstrap/terraform.tfstate` (66,023 bytes, 05:31:42 UTC).
+- `scripts/verify_bootstrap.sh` at **2026-11-23T05:31:48Z: `RESULT: all checks passed`** (20/20 PASS). Covered: state bucket versioning, SSE-KMS, public access block and TLS-only policy; trail logging with log file validation (first delivery 05:28:23Z); each role's exact subject and audience; boundary; ECR immutability and scan-on-push; project budget. The shared OIDC provider and the AIOps budget are untouched.
+
+Runbook defects found on this first run, fixed in [bootstrap-runbook.md](bootstrap-runbook.md):
+- The bucket name was read through `terraform output` after `backend.tf` existed, so it came out empty.
+- A typed `yes` at the bucket-name prompt was taken as the bucket name.
+- `-input=false` is refused for a state migration; `-force-copy` replaces it.
+
+Each failed safely: the local state stayed intact until the migration succeeded. Record
 here: the plan line (expected `28 to add, 0 to change, 0 to destroy`), the apply summary, the
 `verify_bootstrap.sh` output, and the `verify_github_settings.sh` output with environments.
 
@@ -248,9 +301,9 @@ explicit SCP deny. us-east-2: no ECS, ALB, NAT, EIP or secrets left; month-to-da
 | 2 | PR triggers tests and security scans | ✅ PR #1, runs 45096890726 (caught a real failure) and 45097129693 (green) |
 | 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9, P2-9); 📋 on a GitHub PR |
 | 4 | Container image built and scanned | ✅ in CI on GitHub (run 45097129693, Trivy gate passed) |
-| 5 | Approved image published to ECR | 📋 Phase 5 |
-| 6 | Authorized deployment updates ECS Fargate | 📋 Phase 5 |
-| 7 | Unapproved deployment is blocked | 📋 Phase 5 |
+| 5 | Approved image published to ECR | 🛠️✅ Phase 5 code · ⏳ first run |
+| 6 | Authorized deployment updates ECS Fargate | 🛠️✅ Phase 5 code · ⏳ first run |
+| 7 | Unapproved deployment is blocked | 🛠️ `dev-deploy` reviewer + OIDC trust · ⏳ evidence |
 | 8 | Application passes health checks | ✅ locally (E13); 📋 behind ALB |
 | 9 | Failing release is rolled back | 📋 Phase 7 |
 | 10 | Configuration drift detected | 📋 Phase 7 |

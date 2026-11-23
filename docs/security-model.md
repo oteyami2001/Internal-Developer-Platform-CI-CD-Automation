@@ -91,7 +91,8 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | Workflow linters: actionlint, zizmor (Actions security), Checkov `github_actions` + a guard that fails if Checkov evaluated zero checks | 🛠️✅ |
 | Code scanning receives only **unsuppressed** Checkov findings (`scripts/sarif_unsuppressed.sh`). Each inline `checkov:skip` carries its justification and is reviewed in the PR diff and in §8 here, so it isn't re-raised as an alert on every PR (owner decision 2026-11-23). Real findings still alert, and still fail CI | 🛠️✅ `test_sarif_filter.py` |
 | Terraform provider lock files for 5 platforms, CI `init -lockfile=readonly` | 🛠️✅ |
-| SBOM (Syft/Trivy CycloneDX) attached to each image build | 📋 Phase 5 |
+| SBOM (Trivy CycloneDX) attached to each image build | 🛠️ `image-build.yml` (artifact `sbom-sample-api-<commit>`, 90 days) |
+| Images pushed only after the smoke test and Trivy gate; deployed only by digest; only the image changes between revisions | 🛠️✅ `test_repo_hygiene.py` (step order), `test_app_deploy.py` (15 tests, 6 mutations caught) |
 | ECR tag immutability + scan on push | 📋 Phase 3 |
 
 ## 6. Secrets

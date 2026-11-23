@@ -35,13 +35,14 @@ change to SNS and to a log group.
 
 1. Find the previous good digest in the last successful `app-deploy` report, or:
    ```bash
-   aws ecs describe-task-definition --task-definition sample-api:<previous-revision> \
+   aws ecs describe-task-definition --task-definition idp-dev-sample-api:<previous-revision> \
      --query 'taskDefinition.containerDefinitions[0].image'
    ```
-2. Run `app-deploy.yml` with `service=sample-api`, `environment=dev`, and `image_digest=<sha256:…>`.
+2. Run `app-deploy.yml` (branch `main`) with `image_digest=<sha256:…>`.
 3. Approve the `dev-deploy` environment.
-4. The workflow waits for steady state and probes `/health` and `/version`. Confirm `/version`
-   reports the expected `git_sha`.
+4. The workflow waits for that deployment's rollout to complete and checks target health (the
+   runner cannot reach the /32-restricted ALB). From your browser, confirm `/version` reports the
+   expected `git_sha`. Details: [release-runbook.md](release-runbook.md).
 
 Never roll back by pushing an old image under a new tag: tags are immutable, and deploys use digests.
 

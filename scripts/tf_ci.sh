@@ -14,7 +14,13 @@
 #
 # Required environment (set by the workflow from GitHub environment variables/secrets):
 #   AWS_ROLE_ARN, AWS_REGION, TF_STATE_BUCKET, ALLOWED_INGRESS_CIDR, TF_VAR_alert_email
-# Optional: SERVICE_IMAGE (digest-pinned image; empty = infrastructure only), EXPECTED_DIGEST (apply)
+# Optional: SERVICE_IMAGE_DIGEST (sha256:<64 hex> of the image that CREATES the ECS service; empty =
+#           infrastructure only), EXPECTED_DIGEST (apply)
+#
+# Release ownership: Terraform creates the service ONCE with SERVICE_IMAGE_DIGEST. Every later
+# release is a new task-definition revision registered by app-deploy.yml (scripts/app_deploy.sh).
+# A plan that would DELETE the running ECS service (for example because SERVICE_IMAGE_DIGEST was
+# removed) is refused here: removing a service is a cleanup decision, never a side effect.
 set -euo pipefail
 
 CMD=${1:?usage: tf_ci.sh plan|apply <env>}
@@ -38,12 +44,18 @@ CALLER=$(aws sts get-caller-identity --query Account --output text)
 export TF_VAR_aws_account_id=$ACCOUNT
 export TF_VAR_allowed_ingress_cidrs
 TF_VAR_allowed_ingress_cidrs=$(jq -cn --arg c "$ALLOWED_INGRESS_CIDR" '[$c]')
-if [ -n "${SERVICE_IMAGE:-}" ]; then export TF_VAR_service_image=$SERVICE_IMAGE; fi
 export TF_IN_AUTOMATION=1 CHECKPOINT_DISABLE=1
 
 # --- Service settings from the validated manifest (never hand-written) ---
 python "$ROOT/scripts/validate_service.py" --render "$ENV" "$ROOT/apps/sample-api/service.yaml" \
   | jq '{service: .}' >"$WORK/service.tfvars.json"
+
+# --- Initial image of the service: an ECR image of THIS account, pinned by digest ---
+if [ -n "${SERVICE_IMAGE_DIGEST:-}" ]; then
+  [[ $SERVICE_IMAGE_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::SERVICE_IMAGE_DIGEST must be sha256:<64 lowercase hex> (from the image-build summary)"; exit 2; }
+  SERVICE_NAME=$(jq -r '.service.service_name' "$WORK/service.tfvars.json")
+  export TF_VAR_service_image="$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/idp/$SERVICE_NAME@$SERVICE_IMAGE_DIGEST"
+fi
 
 terraform -chdir="$STACK" init -input=false -lockfile=readonly -no-color \
   -backend-config="bucket=$TF_STATE_BUCKET" \
@@ -69,6 +81,12 @@ terraform -chdir="$STACK" show -json "$WORK/tfplan" >"$WORK/plan.json"
 # review gate into a no-op. Only a real Terraform plan document (format_version) is accepted.
 if ! jq -e 'type == "object" and has("format_version")' "$WORK/plan.json" >/dev/null 2>&1; then
   echo "::error::terraform show -json did not produce a plan document; refusing to continue"
+  exit 1
+fi
+# Never delete the running service as a side effect (see header). Replacing it is a delete too.
+if jq -e '[.resource_changes[]? | select((.address | test("^module\\.service\\[[0-9]+\\]\\.aws_ecs_service\\."))
+    and (.change.actions | index("delete")))] | length > 0' "$WORK/plan.json" >/dev/null; then
+  echo "::error::Refusing: this plan would DELETE the running ECS service. If SERVICE_IMAGE_DIGEST was removed or emptied, set it back. Removing an environment is done by the cleanup workflow, not by a plan side effect."
   exit 1
 fi
 # Canonical, order-independent description of every change; hashed, never published in clear.
