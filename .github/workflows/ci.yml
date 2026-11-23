@@ -62,6 +62,8 @@ jobs:
         run: |
           mkdir -p reports
           python -m pytest --cov --cov-report=term --cov-report=xml:reports/coverage.xml --junitxml=reports/junit.xml
+      - name: Service tests (each apps/<service> on its own, coverage gate 90%)
+        run: JUNIT_DIR=reports make test-apps
       - name: Validate service manifests
         run: make validate-services
       - name: Service catalog is up to date
@@ -74,10 +76,13 @@ jobs:
           fi
           python - >> "$GITHUB_STEP_SUMMARY" <<'PY'
           import xml.etree.ElementTree as ET
-          s = ET.parse("reports/junit.xml").getroot()
-          s = s if s.tag == "testsuite" else s[0]
+          import pathlib
           print("## Unit tests")
-          print(f"tests={s.get('tests')} failures={s.get('failures')} errors={s.get('errors')} skipped={s.get('skipped')} time={s.get('time')}s")
+          for f in sorted(pathlib.Path("reports").glob("junit*.xml")):
+              s = ET.parse(f).getroot()
+              s = s if s.tag == "testsuite" else s[0]
+              name = "platform" if f.stem == "junit" else f.stem.removeprefix("junit-")
+              print(f"- {name}: tests={s.get('tests')} failures={s.get('failures')} errors={s.get('errors')} time={s.get('time')}s")
           try:
               c = ET.parse("reports/coverage.xml").getroot()
               print(f"\nline coverage: {float(c.get('line-rate')) * 100:.1f}%")

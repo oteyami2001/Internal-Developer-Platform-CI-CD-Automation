@@ -3,6 +3,27 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Phase 6 — Self-service (code, 2026-11-23)
+
+Approved by the owner 2026-11-23. Offline only: Phase 6 creates no AWS resources.
+Exit criterion: *a new service created from the template passes CI unchanged.*
+
+| # | Check | Result |
+|---|---|---|
+| P6-1 | `scripts/new_service.py orders-api --owner team-payments …` into a temporary `apps/`: the generated manifest passes schema + policy, **its own test suite passes with the 90% coverage gate**, Ruff `check` + `format --check` pass, and it appears in the catalog and catalog page | ✅ `test_new_service.py` |
+| P6-2 | Template ≡ reference service: rendering the template with `sample-api`'s values reproduces `apps/sample-api` byte for byte (11 files) | ✅ |
+| P6-3 | Invalid requests are refused before anything is written: bad names (3 cases), unapproved team, reserved name, short description, quotes; an existing service is never overwritten | ✅ 9 cases |
+| P6-4 | Every service is tested on its own (`make test-apps`, `scripts/test_services.py`), so a new service is picked up by CI with no workflow change; CI summary lists each suite | ✅ sample-api 27 tests, 100% coverage |
+| P6-5 | Catalog page `docs/service-catalog.md` generated and staleness-checked with the YAML catalog | ✅ |
+| P6-6 | Deploy-request issue form: digest, environment, rollback digest required; **no workflow may run on issue events** (public issue text is untrusted) | ✅ hygiene test |
+| P6-7 | Dependabot covers `/apps/*` and `/platform/templates/*` (pip + docker) in one grouped PR; every Dockerfile (services + template) digest-pinned to Python 3.13 | ✅ hygiene tests |
+| P6-8 | Mutation testing: reference/template drift, skipped policy check, module name not rendered, catalog page staleness not checked, template dropped from Dependabot | ✅ 5/5 caught |
+
+**Honest scope:** a second service passes CI and joins the catalog. Running it in AWS still needs a
+platform change: its own ECR repository (bootstrap), a multi-service environment stack, and
+`image-build`/`app-deploy` parameterised by service. It is requested with a Deploy request issue and
+listed as future work.
+
 ## Phase 5 — Delivery pipeline (2026-11-23)
 
 Approved by the owner 2026-11-23 ([release-runbook.md](release-runbook.md)).

@@ -14,7 +14,8 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: pip
-    directories: ["/", "/apps/sample-api"]
+    # Every service and the template it is generated from (one grouped PR keeps them identical).
+    directories: ["/", "/apps/*", "/platform/templates/*"]
     schedule:
       interval: weekly
     cooldown:
@@ -24,7 +25,7 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: docker
-    directory: /apps/sample-api
+    directories: ["/apps/*", "/platform/templates/*"]
     schedule:
       interval: weekly
     cooldown:

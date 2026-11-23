@@ -8,7 +8,7 @@ networking or arbitrary AWS resources.
 **Stack:** AWS (ECS Fargate, ECR, ALB, VPC, IAM, CloudWatch, SNS, Budgets) · Terraform · GitHub
 Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
 
-> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 delivery pipeline ☁️ AWS-verified (2026-11-23): approved releases by digest, rejected release blocked. Next: Phase 6.**
+> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 delivery pipeline ☁️ AWS-verified (2026-11-23): approved releases by digest, rejected release blocked. Phase 6 self-service 🛠️✅ (offline).**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
 > Target: the AIOps project's AWS account in us-east-2, shared with that project's retained
@@ -28,7 +28,8 @@ Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · C
 | Delivery (Phase 5): `image-build` (smoke, Trivy gate, SBOM, immutable tag, digest) and `app-deploy` (approval, digest only, image-only revision, rollout + health verification); Terraform refuses to delete the running service | 🛠️✅ script/workflow tests, mutation-tested · ☁️ 3 approved releases, 1 rejected ([runbook](docs/release-runbook.md), [evidence](docs/portfolio-evidence.md)) |
 | `ci.yml`: pytest, Ruff, Bandit, manifests, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov (IaC, Dockerfile, Actions, secrets), Trivy (repo + image), actionlint, zizmor, shellcheck; one `ci-ok` gate | ✅ green on GitHub ([PR #1](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/pull/1)) |
 | Workflow security rules as tests (SHA pins, least privilege, no OIDC in CI, no `pull_request_target`, no expression injection) | 🛠️✅ 23 tests |
-| Developer self-service, drift detection, cleanup, rollback drills | 📋 Phases 6–7 |
+| Self-service (Phase 6): `scripts/new_service.py` creates a service from the golden-path template that passes CI unchanged; generated [service catalog](docs/service-catalog.md); deploy-request issue form | 🛠️✅ 17 tests (generated service: manifest, own tests 90% coverage, Ruff), template ≡ reference service, 5/5 mutations caught |
+| Drift detection, cleanup, rollback drills | 📋 Phase 7 |
 
 ## Architecture
 
@@ -53,7 +54,8 @@ plan, workflow plan) · [diagrams/architecture.mmd](diagrams/architecture.mmd).
 apps/sample-api/          FastAPI reference workload (app, tests, Dockerfile, service.yaml)
 platform/schemas/         service.schema.json - the developer contract
 platform/policy/          platform-policy.yaml - platform-owned guardrails
-platform/catalog/         services.yaml - GENERATED service catalog
+platform/catalog/         services.yaml - GENERATED service catalog (+ docs/service-catalog.md)
+platform/templates/       python-service - golden-path template used by scripts/new_service.py
 scripts/                  manifest tools, tf_ci.sh (plan/apply gate), push_image.sh, app_deploy.sh, verifiers
 terraform/bootstrap/      account foundation (state, OIDC roles, ECR, budget) - Phase 3
 terraform/stack/          the single environment root module (+ guardrail tests)
@@ -89,7 +91,8 @@ validation, catalog check, `terraform fmt/validate/test`, environment-data tests
 | [architecture.md](docs/architecture.md) | Topology, environments, dev vs production network, module plan, workflow plan |
 | [security-model.md](docs/security-model.md) | OIDC roles, guardrails, supply chain, documented exceptions |
 | [threat-model.md](docs/threat-model.md) | STRIDE by trust boundary, mitigations, residual risk |
-| [developer-guide.md](docs/developer-guide.md) | Manifest reference, local workflow, service contract |
+| [developer-guide.md](docs/developer-guide.md) | Manifest reference, local workflow, service contract, creating a new service |
+| [service-catalog.md](docs/service-catalog.md) | GENERATED catalog of every service |
 | [deployment-plan.md](docs/deployment-plan.md) | AWS assessment, owner decisions, phase roadmap, commands |
 | [cost-model.md](docs/cost-model.md) | Unit prices (to verify), demo/continuous estimates, budgets |
 | [rollback-runbook.md](docs/rollback-runbook.md) | Circuit breaker, digest rollback, infra revert, drift, cleanup |

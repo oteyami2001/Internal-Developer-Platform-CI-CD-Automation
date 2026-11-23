@@ -11,7 +11,7 @@ ENVS      := dev staging prod
 export CHECKPOINT_DISABLE := 1
 
 .PHONY: help install lint lint-workflows test validate-services catalog catalog-check tf-fmt tf-validate \
-        tf-test tf-env-data tflint image smoke security checkov-guard check
+        tf-test tf-env-data tflint image smoke security checkov-guard check test-apps
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -33,8 +33,12 @@ lint-workflows: ## actionlint + zizmor (GitHub Actions correctness and security)
 	zizmor --offline --min-severity low .github/workflows
 	shellcheck -S warning scripts/*.sh
 
-test: ## Unit tests with coverage gate (90%)
+test: ## Platform tests + every service's own tests, each with a 90% coverage gate
 	$(PYTHON) -m pytest --cov --cov-report=term-missing
+	$(MAKE) --no-print-directory test-apps
+
+test-apps: ## Each apps/<service> tested on its own (own pyproject.toml); JUNIT_DIR=dir adds junit-<service>.xml
+	$(PYTHON) scripts/test_services.py
 
 validate-services: ## Validate every apps/*/service.yaml against schema + platform policy
 	$(PYTHON) scripts/validate_service.py apps/*/service.yaml

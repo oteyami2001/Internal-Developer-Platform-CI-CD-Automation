@@ -1,7 +1,8 @@
 # Developer guide
 
-How a developer ships a service on the platform. Phase 1 covers the manifest, local checks and the
-catalog. Template scaffolding (Phase 6) and the AWS deployment workflows (Phases 3–5) are marked 📋.
+How a developer ships a service on the platform: the manifest, local checks, the catalog
+([service-catalog.md](service-catalog.md)), creating a new service from the template, and releasing
+it through the approved pipeline.
 
 ## 1. The service manifest
 
@@ -99,18 +100,53 @@ make image smoke                                                  # hardened con
 | Logs JSON to stdout | CloudWatch Logs Insights queries |
 | Reads build metadata from `APP_VERSION`, `GIT_SHA`, `BUILD_TIME` | `/version` proves which image runs |
 
-## 4. Shipping a change 📋 (Phases 2–5)
+## 4. Shipping a change ☁️ (verified in AWS, Phase 5)
 
 1. Branch, change code and/or `service.yaml`, open a PR (template checklist).
 2. `ci.yml` runs every check 🛠️; the single required status `ci-ok` blocks merge on any failure.
    Run `make check` first to see the same results locally.
 3. Merge to `main`, then `image-build.yml` builds, scans and pushes, and records `image@sha256:…`.
-4. Request a deployment (`app-deploy.yml`, or the deploy-request issue form in Phase 6) with that digest.
+4. Request a deployment with that digest: open a **Deploy request** issue (Issues → New issue). The
+   platform owner runs `app-deploy.yml` with it ([release-runbook.md](release-runbook.md)).
 5. A reviewer approves the `dev-deploy` environment; the workflow deploys and reports health.
 6. If the release is unhealthy, the ECS circuit breaker rolls back automatically
    (see [rollback-runbook.md](rollback-runbook.md)).
 
-## 5. Creating a new service 📋 (Phase 6)
+## 5. Creating a new service
 
-`scripts/new_service.py <name> --owner <team>` will copy `platform/templates/python-service` into
-`apps/<name>`, fill in the manifest, and the catalog regenerates on the next `make catalog`.
+```bash
+python scripts/new_service.py orders-api --owner team-payments --description "Order intake for the shop."
+```
+
+This:
+1. checks the request with the **same rules as CI**: name format, approved team, reserved names,
+   description length;
+2. copies the golden-path template [`platform/templates/python-service`](../platform/templates/python-service)
+   into `apps/orders-api/`: a FastAPI service with `/health`, `/ready`, `/version`, JSON logs,
+   graceful shutdown, a hardened digest-pinned Dockerfile and its own tests;
+3. regenerates the catalog (`platform/catalog/services.yaml` and [service-catalog.md](service-catalog.md)).
+
+Then:
+
+```bash
+make test-apps
+```
+
+```bash
+make check
+```
+
+Open a pull request. CI picks up the new service automatically: manifest validation, its own test
+suite (90% coverage gate), Ruff, Bandit, Checkov and Trivy. The new service passes CI **unchanged**,
+as the platform's own tests prove for every change to the template (`tests/platform/test_new_service.py`).
+
+**The template cannot drift.** Rendering it with `sample-api`'s values must reproduce
+`apps/sample-api` byte for byte, so the template is exactly the code that is built, scanned and
+deployed. A change to one without the other fails CI. Dependabot updates both in one grouped PR.
+
+**What is not self-service yet (honest scope):** the AWS side of a *second* service, meaning its ECR
+repository (bootstrap) and its ECS service and target (the environment stack, which today deploys
+one service), plus `image-build`/`app-deploy`, which are wired to `sample-api`. A new service passes
+CI and appears in the catalog. Running it in AWS needs a platform change, which you request with a
+**Deploy request** issue. Multi-service deployment is listed in [deployment-plan.md](deployment-plan.md)
+as future work.
