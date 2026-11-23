@@ -19,7 +19,7 @@ environment. Account ID masked in the logs.
 | P4-A5 | Drift check: `terraform-plan` run [45121998148](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45121998148), 06:07:32–06:07:52 | `No changes. Your infrastructure matches the configuration.` | ✅ |
 | P4-A6 | ALB reachability from the sandbox (not the allowed /32) | Connection timed out. Consistent with the security group, but **not proof** of correct behaviour | ⚠️ inconclusive |
 | P4-A6b | CloudWatch alarms in the console (owner screenshot, ~06:12) | 4 alarms (`idp-dev-latency-p95`, `-target-5xx`, `-alb-5xx`, `-unhealthy-targets`): all `OK`, 0 in alarm, 0 insufficient data | ✅ |
-| P4-A7 | ALB from the operator's IP (expected HTTP `503`: no targets until Phase 5) | Not yet recorded | ⏳ |
+| P4-A7 | ALB `/health` from the operator's allowed IP in a browser (owner screenshot, ~06:15) | `503 Service Temporarily Unavailable`, as expected: the listener answers, and there are no targets until Phase 5 | ✅ |
 
 ### Code and offline tests
 
