@@ -102,16 +102,16 @@ state. Re-running steps 5–6 continues from there; nothing is created twice.
 ## 7. Move the bootstrap state into S3
 
 ```bash
-BUCKET=$(terraform output -raw state_bucket) && echo "state bucket: $BUCKET" && cp backend.tf.example backend.tf && terraform init -input=false -migrate-state -backend-config="bucket=$BUCKET"
+B="idp-tfstate-$(aws sts get-caller-identity --query Account --output text)-us-east-2" && cp backend.tf.example backend.tf && terraform init -migrate-state -force-copy -backend-config="bucket=$B" && aws s3 ls "s3://$B/bootstrap/"
 ```
 
-The bucket name must be read **before** `backend.tf` exists. With an uninitialized backend
-configured, `terraform output` itself fails, so the name would be empty (this happened on the
-first real run, 2026-11-23). If it does happen, the local state is untouched. Run:
+Expected: `Successfully configured the backend "s3"!` and a listing that ends in `terraform.tfstate`.
 
-```bash
-terraform init -input=false -migrate-state -backend-config="bucket=idp-tfstate-$(aws sts get-caller-identity --query Account --output text)-us-east-2"
-```
+Lessons from the first real run (2026-11-23), all recoverable because the local state stays
+untouched until a migration succeeds:
+- Build the bucket name from the account ID. `terraform output` fails once `backend.tf` exists.
+- Without `-backend-config`, Terraform *prompts for the bucket name*. Typing `yes` there makes it try a bucket named "yes".
+- `-input=false` is refused for a migration. `-force-copy` is the non-interactive approval.
 
 Answer `yes`. Then confirm the state is in S3:
 

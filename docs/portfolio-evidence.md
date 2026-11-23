@@ -78,7 +78,19 @@ PASS     environment dev-plan deploys only from main
 (The `main` ruleset, secret scanning, Dependabot and Actions-token checks also still PASS. The OIDC
 subject is unchanged: immutable prefix `repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837`.)
 
-⏳ Pending: owner runs [bootstrap-runbook.md](bootstrap-runbook.md) steps 3–8 in CloudShell. Record
+**Bootstrap applied and AWS-verified ☁️** (owner, AWS CloudShell us-east-2, 2026-11-23):
+
+- `terraform apply bootstrap.tfplan`: **`Apply complete! Resources: 28 added, 0 changed, 0 destroyed.`** (~05:21 UTC; the S3 lifecycle configurations took 56 s).
+- Outputs match the design: four roles, each trusting exactly one immutable OIDC subject (`…@1465573837:environment:dev-plan`, `:environment:dev`, `:environment:dev-deploy`, `:ref:refs/heads/main`), boundary `idp-dev-workload-boundary`, ECR `idp/sample-api`, trail `idp-management-events`.
+- State migrated to `s3://idp-tfstate-<account>-us-east-2/bootstrap/terraform.tfstate` (66,023 bytes, 05:31:42 UTC).
+- `scripts/verify_bootstrap.sh` at **2026-11-23T05:31:48Z: `RESULT: all checks passed`** (20/20 PASS). Covered: state bucket versioning, SSE-KMS, public access block and TLS-only policy; trail logging with log file validation (first delivery 05:28:23Z); each role's exact subject and audience; boundary; ECR immutability and scan-on-push; project budget. The shared OIDC provider and the AIOps budget are untouched.
+
+Runbook defects found on this first run, fixed in [bootstrap-runbook.md](bootstrap-runbook.md):
+- The bucket name was read through `terraform output` after `backend.tf` existed, so it came out empty.
+- A typed `yes` at the bucket-name prompt was taken as the bucket name.
+- `-input=false` is refused for a state migration; `-force-copy` replaces it.
+
+Each failed safely: the local state stayed intact until the migration succeeded. Record
 here: the plan line (expected `28 to add, 0 to change, 0 to destroy`), the apply summary, the
 `verify_bootstrap.sh` output, and the `verify_github_settings.sh` output with environments.
 
