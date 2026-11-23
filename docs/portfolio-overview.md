@@ -33,7 +33,7 @@ a self-service platform that gives both.
 
 **Measured in AWS (us-east-2):** dev infrastructure applied as 37 resources in about 3 minutes.
 The first release was steady after 1 min 27 s. Approved releases completed in **150 s** and **146 s**
-with 1 healthy target. The circuit-breaker rollback took about **5 min** (21:43 → 21:48 UTC).
+with 1 healthy target. The circuit breaker failed the bad release after about 5 min, and the automatic rollback was steady at 21:49:08 UTC: **about 6 min** from bad release to healed service, recorded in CloudWatch.
 
 ## Engineering quality
 
