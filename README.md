@@ -93,6 +93,7 @@ validation, catalog check, `terraform fmt/validate/test`, environment-data tests
 | [rollback-runbook.md](docs/rollback-runbook.md) | Circuit breaker, digest rollback, infra revert, drift, cleanup |
 | [portfolio-evidence.md](docs/portfolio-evidence.md) | Timestamped test results and defects found |
 | [phase-0-assessment.md](docs/phase-0-assessment.md) | Repository, reference-project and tooling assessment |
+| [aws-discovery-2026-11-23.md](docs/aws-discovery-2026-11-23.md) | Live AWS account discovery (redacted) and its Phase 3 impact |
 | [github-settings.md](docs/github-settings.md) | Branch ruleset, secret scanning, Actions defaults: apply + verify |
 | [docs/adr/](docs/adr) | Architecture decision records |
 

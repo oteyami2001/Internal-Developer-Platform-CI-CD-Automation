@@ -6,7 +6,15 @@ automatically.
 
 ## 1. Phase 0 — AWS environment assessment (2026-11-23)
 
-### 1.1 Result: **blocked — no usable AWS credentials in the build environment**
+### 1.0 Update: discovery completed by the owner (2026-11-23T02:45:24Z, AWS CloudShell us-east-2)
+
+✅ Done. Results and their impact on Phase 3: [aws-discovery-2026-11-23.md](aws-discovery-2026-11-23.md).
+In short: correct account; us-east-1 confirmed SCP-denied; the shared OIDC provider, AIOps bucket,
+ECR repository and $30 budget are present; no leftover billable resources; month-to-date cost is
+nothing above $0.01. **New findings:** no CloudTrail trail, and a second SCP denying at least
+`iam:ListAccountAliases`.
+
+### 1.1 Original result (build environment): **blocked — no usable AWS credentials**
 
 | Check | Result |
 |---|---|
@@ -49,6 +57,8 @@ existing budgets and CloudTrail trails.
 | 3 | **Budgets** | ✅ account-wide: keep the existing `aiops-account-monthly` ($30) · ❓ confirm the project budget `idp` ($25, Project tag) |
 | 4 | **Alert e-mail** and **operator `/32`** | ❓ open (set as GitHub environment variables, never committed) |
 | 5 | **HTTPS for the demo?** | ❓ open. A Route 53 domain + ACM certificate removes exception SE-2 |
+| 6 | **CloudTrail trail** (none exists) | ❓ open. Recommended: single-Region management-events trail to an encrypted S3 bucket in bootstrap (~cents/month) |
+| 7 | **Where to run the bootstrap** | ✅ AWS CloudShell us-east-2 as the existing admin role (no local keys) |
 
 Discovery is still required before Phase 3, now to **confirm** the inherited state: run
 `scripts/aws_discovery.sh us-east-2 us-east-1`. Expected: the OIDC provider and `aiops-*` roles,
@@ -59,7 +69,7 @@ us-east-1 calls are denied by the SCP.
 
 | Phase | Scope | AWS changes | Exit criteria (evidence) | Status |
 |---|---|---|---|---|
-| **0** Assessment | Repo inspection, read-only AWS discovery | None | Repo assessment ✅; AWS discovery report (owner-run) | ⚠️ repo done, AWS blocked |
+| **0** Assessment | Repo inspection, read-only AWS discovery | None | Repo assessment ✅; AWS discovery report (owner-run) ✅ | ✅ (2026-11-23) |
 | **1** Architecture and scaffolding | Docs, ADRs, FastAPI app, Dockerfile, manifest schema/policy/validator, catalog, Terraform interfaces + guardrail tests | None | `make check` green; container smoke test | ✅ (see portfolio-evidence.md) |
 | **2** CI and security automation | `ci.yml` (all checks), TFLint config, Trivy fs + image gates, SHA-pinned actions, Dependabot, `main` ruleset + secret scanning + push protection ([github-settings.md](github-settings.md)), multi-platform provider lock files | None | Green CI on a PR ✅; zlib CVE closed by the runner build ✅; a deliberately insecure Terraform change fails on a PR 📋; `verify_github_settings.sh` passes ✅ | ✅ merged (PR #1) · 1 exit item open |
 | **3** Bootstrap *(approval)* | State bucket, plan/apply/image-push/deploy roles (existing OIDC provider looked up, not created), boundary, ECR, project budget; GitHub environments `dev-plan`, `dev`, `dev-deploy` with required reviewers **verified via API** | Yes (≈ $0.20/month) | `terraform apply` output + IAM trust policies + environment protection API output | 📋 |

@@ -102,8 +102,10 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 
 ## 7. Audit and evidence
 
-- CloudTrail (account trail: existence to be confirmed by discovery) records every role session.
-  The OIDC `sub` appears in the `AssumeRoleWithWebIdentity` event.
+- CloudTrail: discovery found **no trail** in the account, only Event history (90 days of
+  management events, free). Every role session and its OIDC `sub` (`AssumeRoleWithWebIdentity`)
+  is still recorded there for 90 days. Recommended for Phase 3: a single-Region management-events
+  trail in the bootstrap, for evidence older than 90 days (owner decision 6).
 - GitHub records environment approvals (who, when) and deployment history.
 - `docs/portfolio-evidence.md` records timestamped, real results only.
 

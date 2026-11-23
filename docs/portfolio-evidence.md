@@ -156,8 +156,10 @@ build (Phase 2) is the authoritative result and must close E15.
 
 ## Phase 0 — AWS discovery
 
-⏸️ Not executed: no valid AWS credentials (`InvalidClientTokenId`). Owner to run
-`scripts/aws_discovery.sh` (read-only). See [deployment-plan.md §1](deployment-plan.md#1-phase-0--aws-environment-assessment-2026-11-23).
+✅ Run by the owner in AWS CloudShell (us-east-2) at **2026-11-23T02:45:24Z** (from this build
+environment it was blocked: `InvalidClientTokenId`). Redacted results:
+[aws-discovery-2026-11-23.md](aws-discovery-2026-11-23.md). us-east-1: every regional read was an
+explicit SCP deny. us-east-2: no ECS, ALB, NAT, EIP or secrets left; month-to-date cost under $0.01 per service.
 
 ## Required scenarios (Phase 8 checklist)
 

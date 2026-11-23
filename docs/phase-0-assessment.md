@@ -41,9 +41,8 @@ Read (shallow clone) for engineering practices. Nothing was copied wholesale.
 evidence, the account holds that project's retained bootstrap and the shared OIDC provider, and its
 dev environment was destroyed on 2026-11-22.
 
-**Live verification is still blocked.** The build environment's AWS credentials are a placeholder (`InvalidClientTokenId`
-from STS), so no read-only discovery ran. Run `scripts/aws_discovery.sh` and see
-[deployment-plan.md §1](deployment-plan.md#1-phase-0--aws-environment-assessment-2026-11-23).
+**Live verification: done by the owner in AWS CloudShell** (the build environment's credentials were
+placeholders). Results: [aws-discovery-2026-11-23.md](aws-discovery-2026-11-23.md).
 
 ## 4. Tooling available for validation
 

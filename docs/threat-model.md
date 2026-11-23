@@ -53,7 +53,8 @@ flowchart LR
 | T21 | Supply chain | T | Build or scan "succeeds" while a security step silently did nothing | 2×2 | `pipefail` everywhere; `apt-get update --error-on=any`; `checkov-guard` fails if Checkov evaluated zero workflow checks (real defects found in Phases 1 and 2) | ✅ |
 | T24 | TB1 | E | A PR edits `ci.yml` to grant itself credentials, unpin an action or inject `${{ github.event.* }}` into a shell | 2×3 | `test_repo_hygiene.py` + zizmor + actionlint fail the PR; CI holds no secrets or OIDC anyway | ✅ |
 | T23 | TB4 | T | Shared account: the AIOps apply role (or a compromised AIOps pipeline) modifies `idp` ECS/ELB/VPC resources; or `idp` cleanup deletes shared resources | 1×2 | `idp` never manages `aiops-*` or the OIDC provider (data lookup); `idp` apply role tag-conditioned + explicit deny on `aiops-*`; AIOps workflows are manual + approval-gated; drift detection reports unexpected changes (ADR 0005, SE-6) | 🛠️ design · 📋 Phase 3/7 |
-| T22 | Repudiation | R | Cannot prove who approved or deployed what | 2×2 | GitHub environment approval logs, CloudTrail role sessions with OIDC subject, deployment report artifacts | 📋 Phase 5 |
+| T22 | Repudiation | R | Cannot prove who approved or deployed what | 2×2 | GitHub environment approval logs, CloudTrail role sessions with OIDC subject (Event history only today: **no trail exists**, 90-day retention), deployment report artifacts | ⚠️ trail proposed for Phase 3 · 📋 Phase 5 |
+| T25 | TB4 | D | An unknown organization SCP (one denies `iam:ListAccountAliases`) blocks part of the bootstrap mid-apply | 2×1 | IAM resources planned and applied first in a small reviewed plan; Terraform keeps partial state (as in the AIOps apply #9), and nothing billable exists yet | 📋 Phase 3 |
 
 ## 4. Residual risks accepted for the MVP
 
