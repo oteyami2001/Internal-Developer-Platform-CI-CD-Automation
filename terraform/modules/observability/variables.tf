@@ -1,49 +1,53 @@
-# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
-# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
-
-# MODULE CONTRACT (Phase 1 skeleton - resources are implemented in Phase 4/7)
-#
-# Planned resources:
-#   aws_sns_topic (+ e-mail subscription, SSE with the AWS-managed key)
-#   aws_cloudwatch_metric_alarm: ALB 5xx, target 5xx, UnHealthyHostCount, p95 TargetResponseTime,
-#                                ECS RunningTaskCount < desired, CPU/memory utilisation
-#   aws_cloudwatch_dashboard (one per environment: ALB, ECS, deployment events)
-#   aws_cloudwatch_event_rule: ECS deployment state changes (COMPLETED / FAILED / ROLLBACK) -> SNS + log group
+# Alerts, alarms, deployment-event history and a dashboard for one environment.
+#   - SNS topic with an e-mail subscription (confirm the e-mail AWS sends).
+#   - ALB alarms always exist; service alarms (healthy hosts, CPU, memory) only once a service runs.
+#   - ECS deployment/service events -> SNS and a log group: a durable record of every deployment,
+#     rollback and circuit-breaker action (required scenario 11).
 
 variable "name_prefix" {
-  type = string
+  description = "Resource name prefix, e.g. idp-dev."
+  type        = string
 }
 
 variable "alert_email" {
-  type = string
+  description = "Alert recipient (personal data: sensitive)."
+  type        = string
+  sensitive   = true
 }
 
 variable "cluster_name" {
-  type = string
+  description = "ECS cluster name (CloudWatch dimension)."
+  type        = string
 }
 
-variable "services" {
-  description = "Service name -> ALB target group ARN suffix."
-  type        = map(string)
+variable "service_name" {
+  description = "ECS service name, or null while no service is deployed."
+  type        = string
+  default     = null
 }
 
 variable "alb_arn_suffix" {
-  type = string
+  description = "ALB ARN suffix (CloudWatch dimension)."
+  type        = string
+}
+
+variable "target_group_arn_suffix" {
+  description = "Target group ARN suffix (CloudWatch dimension)."
+  type        = string
 }
 
 variable "alarm_thresholds" {
+  description = "Alarm thresholds."
   type = object({
     http_5xx_per_5min = optional(number, 5)
     p95_latency_ms    = optional(number, 1000)
+    cpu_percent       = optional(number, 80)
+    memory_percent    = optional(number, 80)
   })
   default = {}
 }
 
 variable "log_retention_days" {
-  type = number
-}
-
-variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Retention of the deployment-events log group."
+  type        = number
 }

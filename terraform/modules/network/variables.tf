@@ -1,27 +1,31 @@
-# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
-# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
-
-# MODULE CONTRACT (Phase 1 skeleton - resources are implemented in Phase 4)
-#
-# Planned resources:
-#   aws_vpc (DNS support/hostnames), aws_internet_gateway
-#   public subnets  x az_count (ALB; dev-mode Fargate tasks with public IPs)
-#   private subnets x az_count (defined, route table without a default route: NO NAT Gateway in the
-#                               MVP; the production reference adds NAT or VPC endpoints)
-#   aws_default_security_group with all rules removed (CKV2_AWS_12)
-#   aws_flow_log -> CloudWatch Logs (REJECT traffic only, short retention, to bound cost)
+# VPC for one environment (dev MVP topology, docs/architecture.md §4.1):
+#   - public subnets (ALB, and dev-mode Fargate tasks with public IPs: no NAT Gateway, exception SE-1)
+#   - private subnets defined for the production reference, with NO default route (no NAT cost)
+#   - default security group stripped of all rules; subnets never auto-assign public IPs
+#   - VPC flow logs (REJECT by default) to CloudWatch Logs through a boundary-carrying IAM role
 
 variable "name_prefix" {
-  type = string
+  description = "Resource name prefix, e.g. idp-dev (IAM role names must match the apply role's idp-<env>-* scope)."
+  type        = string
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{2,15}$", var.name_prefix))
+    error_message = "name_prefix must be 3-16 lowercase characters."
+  }
 }
 
 variable "vpc_cidr" {
-  type = string
+  description = "VPC CIDR (/16 to /24). Subnets are /4 splits: public = first az_count, private = from the 9th."
+  type        = string
+  validation {
+    condition     = can(cidrnetmask(var.vpc_cidr)) && tonumber(split("/", var.vpc_cidr)[1]) >= 16 && tonumber(split("/", var.vpc_cidr)[1]) <= 24
+    error_message = "vpc_cidr must be a valid IPv4 CIDR between /16 and /24."
+  }
 }
 
 variable "az_count" {
-  type    = number
-  default = 2
+  description = "Availability Zones to span (an ALB needs at least 2)."
+  type        = number
+  default     = 2
   validation {
     condition     = var.az_count >= 2 && var.az_count <= 3
     error_message = "az_count must be 2 or 3."
@@ -29,13 +33,15 @@ variable "az_count" {
 }
 
 variable "create_private_subnets" {
-  type    = bool
-  default = true
+  description = "Create private subnets (no default route in the MVP; the production reference adds egress)."
+  type        = bool
+  default     = true
 }
 
 variable "flow_logs_traffic_type" {
-  type    = string
-  default = "REJECT"
+  description = "VPC flow log filter. REJECT keeps ingestion cost minimal while recording blocked traffic."
+  type        = string
+  default     = "REJECT"
   validation {
     condition     = contains(["ACCEPT", "REJECT", "ALL"], var.flow_logs_traffic_type)
     error_message = "flow_logs_traffic_type must be ACCEPT, REJECT or ALL."
@@ -43,10 +49,11 @@ variable "flow_logs_traffic_type" {
 }
 
 variable "log_retention_days" {
-  type = number
+  description = "Flow log retention in days."
+  type        = number
 }
 
-variable "tags" {
-  type    = map(string)
-  default = {}
+variable "permissions_boundary_arn" {
+  description = "Boundary every role in this environment must carry (the apply role cannot create roles without it)."
+  type        = string
 }

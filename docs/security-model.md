@@ -40,7 +40,7 @@ Every role created by the apply role must carry the workload boundary (an `iam:P
 condition on `CreateRole`/`Put*Policy`), as in the previous project, whose boundary design is reused
 after review. The boundary denies IAM writes, Organizations/account/billing and CloudTrail changes.
 
-### 2.3 Workload roles 📋 (Phase 4, `ecs-service`)
+### 2.3 Workload roles 🛠️✅ (`terraform/modules/ecs-service`)
 - **Execution role** (per service): pull from its ECR repository, write its log group, read only
   `idp/<env>/<service>/*` secrets.
 - **Task role** (per service): empty by default. The sample app calls no AWS APIs.
@@ -72,7 +72,8 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 - Plain HTTP ingress must be `/32`; `0.0.0.0/0` is accepted only with an ACM certificate (HTTPS).
 - prod requires HTTPS; non-prod log retention ≤ 30 days; budget 1–200 USD.
 - ECS images must be `<account>.dkr.ecr.<region>.amazonaws.com/…@sha256:<digest>`. Tags such as `:latest` and non-ECR registries are rejected.
-- Hard-coded, non-configurable task settings (Phase 4): `readonlyRootFilesystem`, non-root user, no privileged mode.
+- Hard-coded, non-configurable task settings 🛠️✅: `readonlyRootFilesystem`, user `10001:10001`, `privileged: false`, all Linux capabilities dropped (`ecs-service` tests).
+- Terraform apply only of a **reviewed plan**: `terraform-apply.yml` re-plans and refuses unless the plan digest equals the reviewed one; it fails closed on anything that is not a plan document (🛠️✅ `test_tf_ci.py`, mutation-tested). No plan file is ever uploaded (it would contain plaintext variables).
 
 ## 5. Supply chain
 
@@ -88,6 +89,7 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | Exact dependency pins; Dependabot for pip, Docker digests, Actions SHAs and Terraform providers (with release cooldowns) | 🛠️ `.github/dependabot.yml` |
 | GitHub Actions pinned to full commit SHAs (verified against upstream tags); `permissions: {}` + per-job grants; no `pull_request_target`; no `${{ }}` in `run:` | 🛠️✅ `test_repo_hygiene.py` (mutation-tested: an unpinned action, `id-token: write` in CI, and an expression injection each fail) |
 | Workflow linters: actionlint, zizmor (Actions security), Checkov `github_actions` + a guard that fails if Checkov evaluated zero checks | 🛠️✅ |
+| Code scanning receives only **unsuppressed** Checkov findings (`scripts/sarif_unsuppressed.sh`). Each inline `checkov:skip` carries its justification and is reviewed in the PR diff and in §8 here, so it isn't re-raised as an alert on every PR (owner decision 2026-11-23). Real findings still alert, and still fail CI | 🛠️✅ `test_sarif_filter.py` |
 | Terraform provider lock files for 5 platforms, CI `init -lockfile=readonly` | 🛠️✅ |
 | SBOM (Syft/Trivy CycloneDX) attached to each image build | 📋 Phase 5 |
 | ECR tag immutability + scan on push | 📋 Phase 3 |
@@ -121,5 +123,7 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | SE-3 | `# nosec B506` on `yaml.load` in `scripts/validate_service.py` | Loader is a `yaml.SafeLoader` subclass (adds a duplicate-key check). Bandit cannot see the subclass | `test_yaml_tags_cannot_execute_code` proves `!!python` tags are rejected | Permanent |
 | ~~SE-4~~ **Closed 2026-11-23** | Local image had 1 HIGH OS CVE (zlib1g CVE-2026-85091, fix available) | This sandbox's network policy blocks Debian mirrors, so `apt-get upgrade` cannot run here. The Dockerfile now **fails** rather than skipping the upgrade | Image never published. **Closed:** the GitHub-runner build passed the Trivy HIGH/CRITICAL gate in runs 45096890726 and 45097129693 | Closed |
 | SE-6 | Shared account with the AIOps project, whose apply role can write ECS/ELB/VPC resources account-wide in us-east-2 | Owner decision to reuse the account (ADR 0005) | AIOps pipeline is manual and approval-gated, and its environment is destroyed. `idp` resources are tagged and monitored for drift; recommend tag conditions in the AIOps repo | Phase 3 |
+| SE-8 | SNS alert topic not encrypted with KMS | CloudWatch alarms and EventBridge cannot publish to a topic encrypted with the AWS managed `aws/sns` key; a CMK costs $1/month | Topic policy allows publishing only by CloudWatch/EventBridge **of this account**; messages carry no secret data | Prod reference: CMK |
+| SE-9 | Task egress HTTPS to `0.0.0.0/0` | Dev cost mode without NAT/VPC endpoints (SE-1): tasks must reach ECR and CloudWatch Logs public endpoints | TCP 443 only; task role has no AWS permissions; prod reference uses VPC endpoints | Phase 4 |
 | SE-5 | Single maintainer: environment approvals cannot be two-person, and the `main` ruleset requires 0 approvals and no code-owner review (an author cannot approve their own PR) | Solo portfolio project | PR + `ci-ok` required, no force push or deletion, no bypass actors; approval gates still force a deliberate, logged human step; raise to 1 approval + code-owner review when a second maintainer joins | Ongoing |
 | SE-7 | TFLint `terraform_unused_declarations` ignored file-by-file in skeleton `variables.tf` | Interface-only skeletons declare inputs that nothing uses yet | Other rules still apply (verified); `test_unused_declaration_ignore_only_while_skeleton` fails as soon as a configuration gains resources | Phase 3/4 (auto-enforced) |

@@ -4,4 +4,3 @@ environment        = "staging"
 region             = "us-east-2" # shared AIOps account; us-east-1 is denied by SCP (ADR 0005)
 vpc_cidr           = "10.41.0.0/20"
 log_retention_days = 14
-monthly_budget_usd = 25

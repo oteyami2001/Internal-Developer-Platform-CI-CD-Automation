@@ -1,19 +1,18 @@
-# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
-# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
-
-# MODULE CONTRACT (Phase 1 skeleton - resources are implemented in Phase 4)
-#
-# Planned resources:
-#   aws_ecs_cluster (Container Insights configurable; off in dev for cost)
-#   aws_ecs_cluster_capacity_providers (FARGATE; FARGATE_SPOT optional for non-prod)
+# ECS cluster (Fargate only). Container Insights is off in dev for cost; enable it for prod.
 
 variable "name_prefix" {
-  type = string
+  description = "Cluster name, e.g. idp-dev (the deploy role is scoped to cluster/<name_prefix>)."
+  type        = string
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{2,15}$", var.name_prefix))
+    error_message = "name_prefix must be 3-16 lowercase characters."
+  }
 }
 
 variable "container_insights" {
-  type    = string
-  default = "disabled"
+  description = "disabled | enabled | enhanced (CloudWatch charges per metric)."
+  type        = string
+  default     = "disabled"
   validation {
     condition     = contains(["disabled", "enabled", "enhanced"], var.container_insights)
     error_message = "container_insights must be disabled, enabled or enhanced."
@@ -24,9 +23,4 @@ variable "use_fargate_spot" {
   description = "Non-prod cost option. Spot tasks can be interrupted with a 2-minute warning."
   type        = bool
   default     = false
-}
-
-variable "tags" {
-  type    = map(string)
-  default = {}
 }
