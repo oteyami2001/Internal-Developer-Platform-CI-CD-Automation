@@ -4,7 +4,7 @@ resource "aws_ecr_repository" "this" {
 
   name                 = each.key
   image_tag_mutability = "MUTABLE" # DEMO (scenario 3): insecure on purpose, must be blocked by CI
-  force_delete         = false     # images are evidence; deleting a repository with images must be deliberate
+  force_delete         = false # images are evidence; deleting a repository with images must be deliberate
 
   image_scanning_configuration {
     scan_on_push = true
