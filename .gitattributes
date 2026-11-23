@@ -1,0 +1,9 @@
+# Keep shell scripts and Makefiles with LF line endings on every OS (Windows Git otherwise converts
+# them to CRLF and bash fails with "$'\r': command not found").
+*.sh      text eol=lf
+Makefile  text eol=lf
+*.tf      text eol=lf
+*.hcl     text eol=lf
+*.py      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
