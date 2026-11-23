@@ -29,7 +29,11 @@ echoes the job's `env`. `mask-aws-account-id` only masks after the credentials s
 plan/apply logs had the same problem. Fix: these values are now *secrets*, which GitHub masks from
 the first line. The configuration script deletes the old variables. A hygiene test allows only
 `AWS_REGION` and `SERVICE_IMAGE_DIGEST` as variables, and it fails if the IP is moved back.
-Earlier run logs are deleted with the owner's approval.
+With the owner's approval, the logs of the 8 affected runs were deleted on 2026-11-23 around
+07:30 UTC: plan 45115730322, 45118508549, 45120116740, 45121998148, 45127566917; apply 45116102618,
+45121248014; image-build 45126795712. The API returns 404 for them now. The runs, results and summaries
+remain, and their evidence is recorded in this file. Verified: the first run after the fix
+(45130666726) printed no identifying value.
 
 **Design decisions:**
 - The runner does not probe `/health`, because the ALB admits only the operator /32 (SE-2). Verification is the
