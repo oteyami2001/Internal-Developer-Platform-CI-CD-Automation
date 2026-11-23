@@ -56,7 +56,7 @@ variable "create_oidc_provider" {
 }
 
 variable "github_oidc_immutable_subject" {
-  description = "true if the repository's OIDC subject uses immutable IDs (repo:owner@<id>/repo@<id>), as the AIOps repository does. Verify with the GitHub API before Phase 3."
+  description = "true: the repository's OIDC subject uses immutable IDs. Verified 2026-11-23 via GET repos/{repo}/actions/oidc/customization/sub: use_immutable_subject=true, prefix repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837."
   type        = bool
   default     = true
 }
@@ -72,9 +72,9 @@ variable "github_owner_id" {
 }
 
 variable "github_repository_id" {
-  description = "Numeric GitHub repository ID used in immutable OIDC subjects (set in Phase 3 from the GitHub API)."
+  description = "Numeric GitHub repository ID used in immutable OIDC subjects (read from the GitHub API 2026-11-23). Not a secret."
   type        = string
-  default     = null
+  default     = "1465573837"
   validation {
     condition     = var.github_repository_id == null || can(regex("^[0-9]+$", var.github_repository_id))
     error_message = "github_repository_id must be numeric."

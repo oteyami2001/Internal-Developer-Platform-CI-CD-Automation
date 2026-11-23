@@ -32,9 +32,11 @@ us-east-1 ([AIOps ADR 0003](https://github.com/oteyami2001/AWS-Cloud-Operations-
    `idp-*`, ECR `idp/*`, tags `Project=idp`.
 4. **Budgets:** keep `aiops-account-monthly` as the account-wide alert. Add only a **project-scoped**
    `idp` budget filtered on `Project=idp` (default $25), instead of a second account-wide budget that would duplicate alerts.
-5. **OIDC subjects:** the AIOps repository uses immutable-ID subjects (`repo:<owner>@<id>/<repo>@<id>:…`).
-   `iam-oidc` supports both formats; Phase 3 reads this repository's actual subject format from the
-   GitHub API before writing any trust policy.
+5. **OIDC subjects:** both repositories use immutable-ID subjects. For this repository the GitHub
+   API reported on 2026-11-23: `use_immutable_subject: true`, prefix
+   `repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837`. Trust
+   policies are built from that prefix, so a renamed or recreated repository with the same name
+   cannot assume the roles.
 6. The account ID is still **not committed**. It reaches Terraform as `TF_VAR_aws_account_id`.
 
 ## Consequences

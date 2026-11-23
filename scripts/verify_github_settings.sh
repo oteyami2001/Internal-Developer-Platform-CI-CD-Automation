@@ -6,51 +6,67 @@
 # docs/portfolio-evidence.md comes from the API, not from assumptions.
 #
 # Usage:  scripts/verify_github_settings.sh [owner/repo]
-# Needs:  gh (authenticated: `gh auth login`), jq
+# Needs:  gh authenticated AS THE REPOSITORY OWNER (`gh auth login`), jq.
+#         In a GitHub Codespace, gh uses the Codespace's GITHUB_TOKEN, which cannot read most
+#         security settings. Run `unset GITHUB_TOKEN && gh auth login` first.
+# Exit:   0 only if every control is verified PASS. FAIL = verified wrong; UNKNOWN = not readable
+#         with this token (not verified, so it also makes the script exit non-zero).
 set -uo pipefail
 
 REPO=${1:-oteyami2001/Internal-Developer-Platform-CI-CD-Automation}
 fails=0
-pass() { printf 'PASS  %s\n' "$1"; }
-fail() { printf 'FAIL  %s\n' "$1"; fails=$((fails + 1)); }
-info() { printf 'INFO  %s\n' "$1"; }
+unknowns=0
+pass() { printf 'PASS     %s\n' "$1"; }
+fail() { printf 'FAIL     %s\n' "$1"; fails=$((fails + 1)); }
+unknown() { printf 'UNKNOWN  %s (this token cannot read it)\n' "$1"; unknowns=$((unknowns + 1)); }
+info() { printf 'INFO     %s\n' "$1"; }
+# check <label> <actual> <expected>: PASS/FAIL when readable, UNKNOWN when the API returned nothing.
+check() {
+  case "$2" in
+    "" | null | unknown) unknown "$1" ;;
+    "$3") pass "$1" ;;
+    *) fail "$1 (is: $2, expected: $3)" ;;
+  esac
+}
 api() { gh api -H "Accept: application/vnd.github+json" "$@" 2>/dev/null; }
 
 command -v gh >/dev/null || { echo "gh CLI not found" >&2; exit 2; }
 command -v jq >/dev/null || { echo "jq not found" >&2; exit 2; }
 
 echo "# GitHub settings verification for $REPO ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  info "GITHUB_TOKEN is set, so gh uses it instead of your login. In a Codespace that token cannot read"
+  info "security settings: run 'unset GITHUB_TOKEN && gh auth login', then re-run this script."
+fi
 
 repo_json=$(api "repos/$REPO") || { echo "cannot read repos/$REPO" >&2; exit 2; }
 info "repository id: $(jq -r .id <<<"$repo_json") (needed for immutable OIDC subjects, Phase 3)"
 info "visibility: $(jq -r .visibility <<<"$repo_json")"
 
-[ "$(jq -r .default_branch <<<"$repo_json")" = "main" ] \
-  && pass "default branch is main" || fail "default branch is $(jq -r .default_branch <<<"$repo_json") (expected main)"
+check "default branch" "$(jq -r .default_branch <<<"$repo_json")" main
 
-# --- Secret scanning (free for public repositories) ---
-ss=$(jq -r '.security_and_analysis.secret_scanning.status // "unknown"' <<<"$repo_json")
-pp=$(jq -r '.security_and_analysis.secret_scanning_push_protection.status // "unknown"' <<<"$repo_json")
-[ "$ss" = "enabled" ] && pass "secret scanning enabled" || fail "secret scanning: $ss"
-[ "$pp" = "enabled" ] && pass "secret scanning push protection enabled" || fail "push protection: $pp"
+# --- Secret scanning (free for public repositories). security_and_analysis is only returned to admins. ---
+check "secret scanning" "$(jq -r '.security_and_analysis.secret_scanning.status // ""' <<<"$repo_json")" enabled
+check "secret scanning push protection" "$(jq -r '.security_and_analysis.secret_scanning_push_protection.status // ""' <<<"$repo_json")" enabled
 
-# --- Dependabot ---
-if gh api "repos/$REPO/vulnerability-alerts" --silent 2>/dev/null; then
-  pass "Dependabot alerts enabled"
+# --- Dependabot: 204 = enabled, 404 = disabled, anything else (e.g. 403) = not readable ---
+va_err=$(gh api "repos/$REPO/vulnerability-alerts" --silent 2>&1)
+if [ -z "$va_err" ]; then
+  pass "Dependabot alerts"
+elif grep -q "HTTP 404" <<<"$va_err"; then
+  fail "Dependabot alerts (disabled)"
 else
-  fail "Dependabot alerts disabled"
+  unknown "Dependabot alerts"
 fi
-dsu=$(jq -r '.security_and_analysis.dependabot_security_updates.status // "unknown"' <<<"$repo_json")
-[ "$dsu" = "enabled" ] && pass "Dependabot security updates enabled" || fail "Dependabot security updates: $dsu"
+check "Dependabot security updates" "$(jq -r '.security_and_analysis.dependabot_security_updates.status // ""' <<<"$repo_json")" enabled
 
 # --- Actions defaults ---
 wp=$(api "repos/$REPO/actions/permissions/workflow")
-[ "$(jq -r .default_workflow_permissions <<<"$wp")" = "read" ] \
-  && pass "default GITHUB_TOKEN permissions are read-only" || fail "default GITHUB_TOKEN permissions: $(jq -r .default_workflow_permissions <<<"$wp")"
-[ "$(jq -r .can_approve_pull_request_reviews <<<"$wp")" = "false" ] \
-  && pass "Actions cannot approve pull requests" || fail "Actions can approve pull requests"
-fork=$(api "repos/$REPO/actions/permissions/fork-pr-contributor-approval" | jq -r '.approval_policy // "unknown"')
-info "fork PR workflow approval policy: $fork (recommended: first_time_contributors or all_external_contributors)"
+[ -n "$wp" ] || wp='{}'
+check "default GITHUB_TOKEN permissions" "$(jq -r '.default_workflow_permissions // ""' <<<"$wp")" read
+check "Actions cannot approve pull requests (can_approve_pull_request_reviews)" "$(jq -r 'if has("can_approve_pull_request_reviews") then (.can_approve_pull_request_reviews | tostring) else "" end' <<<"$wp")" false
+fork=$(api "repos/$REPO/actions/permissions/fork-pr-contributor-approval" | jq -r '.approval_policy // "unknown"' 2>/dev/null)
+info "fork PR workflow approval policy: ${fork:-unknown} (recommended: first_time_contributors or all_external_contributors)"
 
 # --- Branch ruleset on main ---
 rules=$(api "repos/$REPO/rules/branches/main")
@@ -87,5 +103,9 @@ for e in $envs; do
 done
 
 echo
-if [ "$fails" -eq 0 ]; then echo "RESULT: all checks passed"; else echo "RESULT: $fails check(s) failed"; fi
-exit $(( fails > 0 ))
+if [ "$fails" -eq 0 ] && [ "$unknowns" -eq 0 ]; then
+  echo "RESULT: all checks passed"
+else
+  echo "RESULT: $fails failed, $unknowns not verifiable with this token"
+fi
+exit $(( fails + unknowns > 0 ))

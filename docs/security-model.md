@@ -23,9 +23,9 @@ Status legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁�
 | `idp-<env>-github-deploy` | `…:environment:<env>-deploy` | `ecs:RegisterTaskDefinition`, `ecs:UpdateService`/`Describe*` on one cluster; `iam:PassRole` for that env's task/execution roles only | Terraform state, any other service |
 
 All trust policies also require `aud = sts.amazonaws.com`. **No role trusts `pull_request`**
-([ADR 0003](adr/0003-no-oidc-trust-for-pull-requests.md)). Subjects shown in the short form; if the
-repository uses immutable-ID subjects (as the AIOps repository does) they become
-`repo:oteyami2001@<owner_id>/Internal-Developer-Platform-CI-CD-Automation@<repo_id>:…`, verified in Phase 3.
+([ADR 0003](adr/0003-no-oidc-trust-for-pull-requests.md)). Subjects are shown in the short form. This
+repository uses **immutable-ID subjects** (verified via the GitHub API on 2026-11-23), so the real
+prefix is `repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837`.
 
 ### 2.1a Shared account ([ADR 0005](adr/0005-shared-account-with-aiops-project.md))
 

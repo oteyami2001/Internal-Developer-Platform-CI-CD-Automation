@@ -6,6 +6,9 @@ settings cannot be changed from the build environment, so the owner applies them
 
 Status: 📋 to be applied by the owner, then verified (Phase 2 exit criterion).
 
+> The `gh api -X …` commands below change settings and need owner credentials. In a Codespace,
+> run `unset GITHUB_TOKEN && gh auth login` first (see §5).
+
 ## 1. Default branch
 
 `main` exists (created 2026-11-23 from the approved Phase 0–1 commit `29fd8d6`). Make it the default:
@@ -66,9 +69,21 @@ setting. CODEOWNERS is still in place. When a second maintainer joins, set the c
 
 ## 5. Verify (read-only)
 
+Run from a local clone or a Codespace, signed in to `gh` **as the repository owner**:
+
 ```bash
 scripts/verify_github_settings.sh
 ```
+
+**In a GitHub Codespace**, `gh` uses the Codespace's `GITHUB_TOKEN`, which cannot read security
+settings (they show as `UNKNOWN`) and cannot change them. Sign in as yourself first, in the same terminal:
+
+```bash
+unset GITHUB_TOKEN && gh auth login
+```
+
+The script exits 0 only when every control is a verified `PASS`. `UNKNOWN` means "not readable
+with this token", not "OK".
 
 Expected after steps 1–4: `RESULT: all checks passed`. Code-owner review is reported as `INFO`
 (SE-5). The output also prints the **repository ID** and **OIDC subject format** that Phase 3

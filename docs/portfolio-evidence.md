@@ -36,6 +36,18 @@ been executed, it says so. All times are UTC.
 
 PR #1 was merged by the owner at 2026-11-23 01:56:42 UTC (merge commit `a4a9438`).
 
+### GitHub settings, baseline (owner ran `scripts/verify_github_settings.sh` at 2026-11-23T02:06:44Z)
+
+Run in a Codespace, so `gh` used the Codespace `GITHUB_TOKEN`:
+
+| Control | Result | Meaning |
+|---|---|---|
+| Default branch | ❌ `claude/stoic-volta-i07auh` | Real: still to switch to `main` |
+| `main` ruleset | ❌ no active rules | Real: not yet applied |
+| Secret scanning, push protection, Dependabot, Actions token defaults | reported `unknown`/`null` | **Not readable with the Codespace token**. The script (v1) wrongly printed some of these as FAIL; fixed to report `UNKNOWN` |
+| OIDC subject | `use_immutable_subject: true`, prefix `repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837` | Real: used for Phase 3 trust policies |
+| Repository ID | `1465573837` | Real: recorded as the bootstrap default |
+
 Not yet demonstrated on GitHub: a deliberately insecure Terraform change failing CI (scenario 3).
 It needs its own PR, because PR #1 merged before the demo commit was pushed.
 
