@@ -6,7 +6,7 @@
 # argument: nothing at build time can swap the base image. Dependabot/Renovate (Phase 2) proposes
 # digest bumps through pull requests so OS patches still arrive, but only after CI scans them.
 
-FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS builder
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS builder
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python -m venv /opt/venv
 COPY requirements.txt /tmp/requirements.txt
@@ -14,7 +14,7 @@ RUN set -eux \
     && /opt/venv/bin/pip install -r /tmp/requirements.txt \
     && { /opt/venv/bin/pip uninstall -y pip setuptools wheel || true; }
 
-FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS runtime
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS runtime
 ARG APP_VERSION=0.0.0-dev
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=unknown
