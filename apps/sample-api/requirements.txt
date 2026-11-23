@@ -1,0 +1,3 @@
+# Runtime dependencies (exact pins; Dependabot/Renovate bumps them in Phase 2).
+fastapi==0.165.0
+uvicorn==0.54.0

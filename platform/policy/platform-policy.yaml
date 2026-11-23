@@ -1,0 +1,39 @@
+# Platform-owned guardrails applied on top of the JSON Schema. Developers edit service manifests;
+# only the platform team (CODEOWNERS) edits this file. scripts/validate_service.py enforces it.
+#
+# Region, VPC, subnets, security groups and IAM are NOT developer-selectable at all: they come from
+# the platform's Terraform configuration for each environment.
+
+approved_teams:
+  - team-platform
+  - team-payments
+  - team-web
+
+reserved_service_names: [platform, admin, aws, default, internal, idp, test]
+
+# Tag keys the platform sets itself (compared case-insensitively).
+reserved_tag_keys: [project, environment, service, owner, managedby]
+
+# Environment variables the platform injects, plus prefixes the runtime reserves.
+reserved_env_vars: [APP_ENV, APP_VERSION, GIT_SHA, BUILD_TIME, SERVICE_NAME, PORT, LOG_LEVEL]
+reserved_env_prefixes: [AWS_, ECS_]
+
+# Plain environment variables whose NAME suggests a secret are rejected; use spec.secrets instead.
+secret_like_env_name_pattern: '(SECRET|PASSWORD|PASSWD|TOKEN|API_?KEY|PRIVATE_?KEY|CREDENTIAL)'
+
+environments:
+  dev:
+    max_desired_count: 2
+    max_cpu: 512
+    max_memory: 1024
+  staging:
+    max_desired_count: 2
+    max_cpu: 1024
+    max_memory: 2048
+  prod:
+    min_desired_count: 2          # survive the loss of one task / AZ
+    max_desired_count: 6
+    max_cpu: 1024
+    max_memory: 4096
+    require_circuit_breaker: true
+    min_healthy_percent: 100      # never drop below full capacity during a prod deployment

@@ -1,0 +1,8 @@
+# Platform guardrails require platform-team review. Enforced once branch protection on `main`
+# enables "Require review from Code Owners" (Phase 2 - verify, do not assume).
+*                         @oteyami2001
+/.github/                 @oteyami2001
+/terraform/               @oteyami2001
+/platform/schemas/        @oteyami2001
+/platform/policy/         @oteyami2001
+/scripts/                 @oteyami2001

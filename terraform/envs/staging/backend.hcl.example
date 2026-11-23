@@ -1,0 +1,8 @@
+# Copy to backend.hcl (git-ignored) or pass these with -backend-config in CI.
+# Bucket is created by terraform/bootstrap (Phase 3). Each environment has its own state key and
+# its own native S3 lock file (<key>.tflock): a dev apply can never lock or overwrite prod state.
+bucket       = "idp-tfstate-<ACCOUNT_ID>-us-east-2"
+key          = "envs/staging/terraform.tfstate"
+region       = "us-east-2"
+encrypt      = true
+use_lockfile = true

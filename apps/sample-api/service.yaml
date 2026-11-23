@@ -1,0 +1,38 @@
+# Service manifest: the ONLY file a developer edits to change how this service is deployed.
+# Schema: platform/schemas/service.schema.json   Guardrails: platform/policy/platform-policy.yaml
+# Validate locally:  make validate-services
+apiVersion: idp.platform/v1alpha1
+kind: Service
+metadata:
+  name: sample-api
+  owner: team-platform
+  description: Reference FastAPI workload used to demonstrate the platform's delivery pipeline.
+  tier: experimental
+  tags:
+    cost-center: platform-demo
+spec:
+  runtime: python3.13
+  container:
+    port: 8080
+    cpu: 256        # 0.25 vCPU - smallest Fargate size
+    memory: 512     # MiB
+  healthCheck:
+    path: /health
+    intervalSeconds: 30
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+  deployment:
+    strategy: rolling
+    circuitBreakerRollback: true
+    minimumHealthyPercent: 100
+    maximumPercent: 200
+  environments:
+    dev:
+      enabled: true
+      desiredCount: 1
+    staging:
+      enabled: false
+      desiredCount: 1
+    prod:
+      enabled: false
+      desiredCount: 2

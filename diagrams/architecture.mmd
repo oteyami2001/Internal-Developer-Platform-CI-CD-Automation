@@ -1,0 +1,48 @@
+%% Internal Developer Platform - logical architecture (dev MVP topology)
+flowchart LR
+  subgraph DevEx["Developer experience (GitHub)"]
+    dev([Developer]) -->|PR: code + service.yaml| repo[(Repository)]
+    repo --> ci[ci.yml<br/>tests, lint, SAST,<br/>manifest + Terraform checks]
+    repo --> catalog[[Service catalog<br/>platform/catalog/services.yaml]]
+  end
+
+  subgraph Gates["Protected GitHub environments"]
+    planEnv{{dev-plan}}
+    applyEnv{{dev: required reviewer}}
+    deployEnv{{dev-deploy: required reviewer}}
+  end
+
+  subgraph AWS["AWS account (single dev account, one approved Region)"]
+    oidc[IAM OIDC provider<br/>token.actions.githubusercontent.com]
+    subgraph Roles["Short-lived OIDC roles"]
+      rPlan[plan role<br/>read-only]
+      rApply[apply role<br/>scoped + boundary]
+      rPush[image-push role<br/>ECR only]
+      rDeploy[deploy role<br/>ECS service only]
+    end
+    state[(S3 state bucket<br/>versioned, encrypted,<br/>native lock files)]
+    ecr[(ECR<br/>IMMUTABLE tags,<br/>scan on push)]
+    subgraph VPC["VPC (2 AZs)"]
+      alb[ALB<br/>ingress: operator /32<br/>or HTTPS]
+      subgraph Pub["Public subnets"]
+        task[Fargate task<br/>0.25 vCPU / 0.5 GB<br/>non-root, read-only FS]
+      end
+      priv[Private subnets<br/>defined, unused in MVP<br/>no NAT Gateway]
+    end
+    cw[CloudWatch<br/>logs, alarms, dashboard]
+    sns[SNS e-mail]
+    budget[AWS Budgets]
+  end
+
+  ci -->|main only| planEnv --> rPlan
+  planEnv -.reviewed plan.-> applyEnv --> rApply
+  repo -->|image-build.yml on main| rPush --> ecr
+  deployEnv --> rDeploy
+  rPlan & rApply & rPush & rDeploy -.AssumeRoleWithWebIdentity.-> oidc
+  rPlan & rApply --> state
+  rApply -->|terraform apply| VPC
+  rDeploy -->|new task definition<br/>image@sha256| task
+  ecr -->|pull by digest| task
+  internet([Operator /32]) --> alb -->|SG: ALB -> task only| task
+  task --> cw --> sns
+  budget --> sns

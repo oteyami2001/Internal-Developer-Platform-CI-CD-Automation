@@ -1,0 +1,50 @@
+# --- Terraform: never commit state, plans, local backends or provider caches ---
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+plan.txt
+plan.json
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# Environment-specific secrets / identifiers are passed as TF_VAR_* in CI, never committed.
+*.auto.tfvars
+*.auto.tfvars.json
+backend.hcl
+secrets.tfvars
+# Root configurations commit their provider lock file; reusable modules do not.
+terraform/modules/**/.terraform.lock.hcl
+
+# --- Credentials ---
+.env
+.env.*
+*.pem
+*.key
+.aws/
+credentials
+credentials.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+reports/
+*.egg-info/
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+.DS_Store
