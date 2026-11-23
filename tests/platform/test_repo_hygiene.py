@@ -169,6 +169,14 @@ def test_dockerfile_stages_use_digest_pinned_python_standard(dockerfile):
         assert re.fullmatch(rf"python:{re.escape(PYTHON_STANDARD)}-slim@sha256:[0-9a-f]{{64}}", image), image
 
 
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda p: p.parent.name)
+def test_every_image_patches_the_os_and_removes_pip(dockerfile):
+    """Found in Phase 7: an image without these failed the Trivy gate (zlib1g, pip-vendored msgpack/urllib3)."""
+    text = dockerfile.read_text(encoding="utf-8")
+    assert "apt-get update --error-on=any" in text and "apt-get upgrade -y" in text
+    assert "pip uninstall -y pip setuptools wheel" in text
+
+
 def test_every_service_and_template_is_covered_by_dependabot():
     config = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
     for ecosystem in ("pip", "docker"):

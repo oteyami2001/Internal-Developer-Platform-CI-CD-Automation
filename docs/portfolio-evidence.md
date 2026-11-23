@@ -17,6 +17,7 @@ rollback, manual drift, cleanup) follow, each recorded below when run.
 | P7-5 | Workflow rules: drift detection is read-only (`dev-plan`, `tf_ci.sh drift`, never apply/TF_MODE); only cleanup and terraform-plan may set `TF_MODE`; cleanup requires digest + typed confirmation + `dev` approval; the drill image is proven to crash and scanned before any credentials, and contains no application code | ✅ 4 rules |
 | P7-6 | Mutation testing: drift falls through, mode not in digest, confirmation not checked, leftover state not verified, leftover load balancer not verified, service guard disabled, duplicate drift issues | ✅ 7/7 caught |
 | P7-7 | Lint and scans: Ruff, Bandit, actionlint, zizmor, shellcheck, Checkov (dockerfile 175 passed, github_actions 408 passed, 0 failed) | ✅ |
+| P7-A0 | First `drill-image` run 45271338917 (21:36) | **Blocked by the Trivy gate, as designed:** the drill Dockerfile used the unpatched base image (zlib1g HIGH; pip-vendored msgpack/urllib3 and setuptools HIGH, all with fixes). Nothing was pushed. Fix: the same OS patching and pip removal as the service image, plus a hygiene test that every Dockerfile has both | ❌ → fixed |
 | P7-A1 | Circuit-breaker drill in AWS | ⏳ |
 | P7-A2 | Manual drift detected and reported (issue), not fixed | ⏳ |
 | P7-A3 | Cleanup verified | ⏳ (on request: it removes the running environment) |

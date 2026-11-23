@@ -6,6 +6,13 @@
 FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
 LABEL org.opencontainers.image.title="rollback-drill-crash-on-start" \
       org.opencontainers.image.source="https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation"
+# Same OS patching and pip removal as the real service image (apps/sample-api/Dockerfile): the drill
+# image passes the same Trivy gate. Found in Phase 7: without them the unpatched base image failed it.
+RUN set -eux \
+    && apt-get update --error-on=any \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && { python -m pip uninstall -y pip setuptools wheel 2>/dev/null || true; }
 USER 10001:10001
 HEALTHCHECK --interval=15s --timeout=3s --retries=1 CMD ["python", "-c", "raise SystemExit(1)"]
 CMD ["python", "-c", "import sys; print('rollback drill: exiting on purpose', flush=True); sys.exit(1)"]
