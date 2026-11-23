@@ -93,13 +93,24 @@ message**. Never try to work around an SCP.
 terraform apply -input=false bootstrap.tfplan
 ```
 
+Run it **once**. A second run reports `Saved plan is stale` and changes nothing: the plan was
+already applied.
+
 If the apply stops partway (for example on an SCP deny), the created resources stay in the local
 state. Re-running steps 5–6 continues from there; nothing is created twice.
 
 ## 7. Move the bootstrap state into S3
 
 ```bash
-cp backend.tf.example backend.tf && terraform init -input=false -migrate-state -backend-config="bucket=$(terraform output -raw state_bucket)"
+BUCKET=$(terraform output -raw state_bucket) && echo "state bucket: $BUCKET" && cp backend.tf.example backend.tf && terraform init -input=false -migrate-state -backend-config="bucket=$BUCKET"
+```
+
+The bucket name must be read **before** `backend.tf` exists. With an uninitialized backend
+configured, `terraform output` itself fails, so the name would be empty (this happened on the
+first real run, 2026-11-23). If it does happen, the local state is untouched. Run:
+
+```bash
+terraform init -input=false -migrate-state -backend-config="bucket=idp-tfstate-$(aws sts get-caller-identity --query Account --output text)-us-east-2"
 ```
 
 Answer `yes`. Then confirm the state is in S3:
