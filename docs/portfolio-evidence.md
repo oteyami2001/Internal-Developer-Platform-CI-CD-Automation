@@ -18,8 +18,9 @@ rollback, manual drift, cleanup) follow, each recorded below when run.
 | P7-6 | Mutation testing: drift falls through, mode not in digest, confirmation not checked, leftover state not verified, leftover load balancer not verified, service guard disabled, duplicate drift issues | ✅ 7/7 caught |
 | P7-7 | Lint and scans: Ruff, Bandit, actionlint, zizmor, shellcheck, Checkov (dockerfile 175 passed, github_actions 408 passed, 0 failed) | ✅ |
 | P7-A0 | First `drill-image` run 45271338917 (21:36) | **Blocked by the Trivy gate, as designed:** the drill Dockerfile used the unpatched base image (zlib1g HIGH; pip-vendored msgpack/urllib3 and setuptools HIGH, all with fixes). Nothing was pushed. Fix: the same OS patching and pip removal as the service image, plus a hygiene test that every Dockerfile has both | ❌ → fixed |
-| P7-A1 | Circuit-breaker drill in AWS | ⏳ |
-| P7-A2 | Manual drift detected and reported (issue), not fixed | ⏳ |
+| P7-A0b | `drill-image` run 45272042704 (21:40, after the fix) | Built; **proven to exit with an error**; Trivy 0 vulnerabilities; pushed `drill-crash-2139f6b…` = `sha256:24790e7d…568b224` (single manifest) | ✅ |
+| P7-A1 | **Circuit-breaker drill** (scenario 9): `app-deploy` run 45272318380 with the drill digest, owner approved `dev-deploy` | `Registered idp-dev-sample-api:5`; rollout `IN_PROGRESS` 21:43 → **`FAILED` 21:48:07**: "ECS deployment circuit breaker: tasks failed to start." The job **failed as designed**, and the service stayed on / returned to revision 4 (minimum healthy 100%: the old task kept serving) | ✅ |
+| P7-A2 | **Drift drill** (scenario 10): owner edited the `idp-dev-latency-p95` description in the console (~21:55) | `drift-detection` run 45274612556: `Plan: 0 to add, 1 to change, 0 to destroy`, issue **#15 "Drift detected: dev"** opened with the address only, run failed, **nothing changed**. Restored through the reviewed flow: plan run 45274873631 (it also revealed that the console silently set `datapoints_to_alarm = 2`), apply run 45275325130 with the reviewed digest + `dev` approval (22:00–22:01). Drift run 45276242898: **no drift**; issue #15 closed | ✅ |
 | P7-A3 | Cleanup verified | ⏳ (on request: it removes the running environment) |
 
 ## Phase 6 — Self-service (code, 2026-11-23)
@@ -396,7 +397,7 @@ explicit SCP deny. us-east-2: no ECS, ALB, NAT, EIP or secrets left; month-to-da
 | 6 | Authorized deployment updates ECS Fargate | ☁️ P5-A3 (first release), P5-A7, P5-A7c |
 | 7 | Unapproved deployment is blocked | ☁️ P5-A8 (rejected: job never started, no credentials) |
 | 8 | Application passes health checks | ✅ locally (E13); 📋 behind ALB |
-| 9 | Failing release is rolled back | 📋 Phase 7 |
-| 10 | Configuration drift detected | 📋 Phase 7 |
+| 9 | Failing release is rolled back | ☁️ P7-A1 (circuit breaker, job failed as designed) |
+| 10 | Configuration drift detected | ☁️ P7-A2 (issue #15, nothing changed, restored via reviewed apply) |
 | 11 | CloudWatch records deployment and application events | 📋 Phase 4/7 (JSON logging ✅ E13) |
 | 12 | Cleanup removes billable workload resources | 📋 Phase 7 |
