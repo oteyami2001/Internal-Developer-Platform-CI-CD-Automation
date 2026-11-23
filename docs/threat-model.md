@@ -35,15 +35,15 @@ flowchart LR
 | T3 | TB1 | T | Manifest smuggles a value via duplicate YAML keys or YAML object tags | 2×3 | Duplicate-key loader; SafeLoader | ✅ |
 | T4 | TB1 | I | Secret committed in a manifest env var | 2×3 | Name + value heuristics in policy; Trivy/Checkov secret scan; GitHub push protection | ✅ heuristics + scans · 📋 push protection |
 | T5 | TB1 | T | Developer weakens guardrails by editing schema/policy in their PR | 2×3 | CODEOWNERS on `platform/`, `terraform/`, `.github/`; `main` ruleset (PR + `ci-ok`); code-owner review once there is a second maintainer (SE-5) | 🛠️ CODEOWNERS + ruleset file · 📋 owner applies, script verifies |
-| T6 | TB2 | E | Approval bypass: environment exists but is not actually protected | 2×3 | Verify with the API (`GET /repos/{o}/{r}/environments`) that required reviewers and branch policies are set; record evidence | 📋 Phase 2 |
+| T6 | TB2 | E | Approval bypass: a branch rule or environment exists but is not actually enforced | 2×3 | `scripts/verify_github_settings.sh` reads the live rules from the API (unreadable = UNKNOWN, never PASS); `main` ruleset verified 2026-11-23; environments verified the same way in Phase 3 | ✅ `main` · 📋 environments |
 | T7 | TB2 | T | Reviewer approves plan A, apply runs plan B (or a re-plan) | 2×3 | Apply only consumes the artifact from the named plan run, verifies SHA-256 + commit SHA, never re-plans | 📋 Phase 3 |
 | T8 | TB2 | T | Stale approval: an old queued apply runs after newer changes | 2×2 | `timeout-minutes` on approval jobs; apply refuses if `main` moved; concurrency group per env | 📋 Phase 3 |
-| T9 | TB3 | S | Another repo/fork/branch obtains a token accepted by our roles | 2×3 | Exact `StringEquals` on `sub` and `aud`; no wildcards | 📋 Phase 3 (test asserts no `*` in subjects) |
-| T10 | TB4 | E | Apply role creates an admin role and escalates | 2×3 | Boundary required on every created role; deny on removing boundaries and on CI-role edits | 📋 Phase 3 |
+| T9 | TB3 | S | Another repo/fork/branch obtains a token accepted by our roles | 2×3 | Exact `StringEquals` on `sub` and `aud` with immutable owner/repo IDs (a recreated repo with the same name is rejected); no wildcards | ✅ `iam_oidc.tftest.hcl` + mutation-tested · ☁️ after apply |
+| T10 | TB4 | E | Apply role creates an admin role and escalates | 2×3 | Boundary required on every created role; deny on removing boundaries and on CI-role edits; boundary itself denies `iam:*` | ✅ module tests + mutation-tested · ☁️ after apply |
 | T11 | TB4 | T | Pipeline targets the wrong account or region | 2×3 | `allowed_account_ids` + caller-identity postcondition; region allowlist + region postcondition; region-conditioned writes | ✅ (offline) |
 | T12 | TB4 | D/$ | Runaway cost (forgotten resources, oversized tasks, NAT) | 3×2 | Policy size/count caps; no NAT; budget alerts; `cleanup.yml`; demo-only deploys | ✅ caps · 📋 budget/cleanup |
 | T13 | TB4 | T | Mutable tag swapped to a malicious image after review | 2×3 | ECR `IMMUTABLE`; Terraform rejects non-digest images; deploy uses the digest recorded by the build | ✅ digest validation · 📋 ECR |
-| T14 | TB4 | I | State/plan leakage | 2×2 | Encrypted, versioned, private state bucket with TLS-only policy; plan artifacts short-retention and sensitive | 📋 Phase 3 |
+| T14 | TB4 | I | State/plan leakage | 2×2 | SSE-KMS, versioned, private, TLS-only state bucket with `prevent_destroy`; plan role reads only its environment prefix; plan artifacts short-retention and sensitive (Phase 4) | ✅ bootstrap tests · ☁️ after apply |
 | T15 | TB5 | I | Plain-HTTP demo endpoint sniffed or abused | 2×1 | `/32` ingress without TLS (validation); no sensitive data; HTTPS for prod | ✅ |
 | T16 | TB5 | I | Info disclosure via `/docs`, `/openapi.json`, `/metrics`, stack traces, `Server` header | 2×1 | Docs off outside `local`; metrics off by default; generic 500 body; `--no-server-header`; security headers | ✅ |
 | T17 | TB5 | T | Header injection via `X-Request-ID` into logs | 2×1 | Strict pattern, otherwise replaced with a UUID; JSON-encoded logs | ✅ |
@@ -53,7 +53,8 @@ flowchart LR
 | T21 | Supply chain | T | Build or scan "succeeds" while a security step silently did nothing | 2×2 | `pipefail` everywhere; `apt-get update --error-on=any`; `checkov-guard` fails if Checkov evaluated zero workflow checks (real defects found in Phases 1 and 2) | ✅ |
 | T24 | TB1 | E | A PR edits `ci.yml` to grant itself credentials, unpin an action or inject `${{ github.event.* }}` into a shell | 2×3 | `test_repo_hygiene.py` + zizmor + actionlint fail the PR; CI holds no secrets or OIDC anyway | ✅ |
 | T23 | TB4 | T | Shared account: the AIOps apply role (or a compromised AIOps pipeline) modifies `idp` ECS/ELB/VPC resources; or `idp` cleanup deletes shared resources | 1×2 | `idp` never manages `aiops-*` or the OIDC provider (data lookup); `idp` apply role tag-conditioned + explicit deny on `aiops-*`; AIOps workflows are manual + approval-gated; drift detection reports unexpected changes (ADR 0005, SE-6) | 🛠️ design · 📋 Phase 3/7 |
-| T22 | Repudiation | R | Cannot prove who approved or deployed what | 2×2 | GitHub environment approval logs, CloudTrail role sessions with OIDC subject, deployment report artifacts | 📋 Phase 5 |
+| T22 | Repudiation | R | Cannot prove who approved or deployed what | 2×2 | GitHub environment approval logs, CloudTrail role sessions with OIDC subject (Event history only today: **no trail exists**, 90-day retention), deployment report artifacts | ✅ trail implemented (log file validation, deletion denied) · ☁️ after apply · 📋 Phase 5 reports |
+| T25 | TB4 | D | An unknown organization SCP (one denies `iam:ListAccountAliases`) blocks part of the bootstrap mid-apply | 2×1 | IAM resources planned and applied first in a small reviewed plan; Terraform keeps partial state (as in the AIOps apply #9), and nothing billable exists yet | 📋 Phase 3 |
 
 ## 4. Residual risks accepted for the MVP
 

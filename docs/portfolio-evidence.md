@@ -3,6 +3,31 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Phase 3 — Terraform bootstrap (2026-11-23)
+
+Approved by the owner on 2026-11-23 with a $25 project budget and the CloudTrail trail. Code and
+offline tests are done; **the AWS apply is performed by the owner** from CloudShell
+([bootstrap-runbook.md](bootstrap-runbook.md)). Nothing below is AWS-verified yet.
+
+### Offline validation
+
+| # | Check | Result | Time (UTC) |
+|---|---|---|---|
+| P3-1 | `make check` (whole repository) | ✅ exit 0 | 03:13:37–03:14:32 |
+| P3-2 | New `terraform test` suites: iam-oidc 8, bootstrap 7, ecr 5, budgets 2, security 1 | ✅ 23/23 passed | 03:14 |
+| P3-3 | Mutation testing of the Terraform assertions (10 deliberate weakenings, e.g. `StringLike` trust, plan role gains `s3:PutObject`, apply role trusts `pull_request`, aiops deny weakened, boundary condition removed, mutable ECR tags, trail validation off, public state bucket, OIDC provider no longer looked up) | ✅ **10/10 caught**, files restored | ~03:02 |
+| P3-4 | Checkov (Terraform) | ✅ 49 passed, 0 failed, 21 skipped (each with inline justification) | 03:14 |
+| P3-5 | TFLint + AWS ruleset | ✅ 0 issues, after fixing 2 findings: unused guard data sources (now outputs) and a null template in standalone module evaluation | ~03:05 |
+| P3-6 | Trivy fs (misconfig, secrets, vulnerabilities; all severities) | ✅ 0 findings (3 LOW and the HIGH SSE/CloudTrail items carry justified inline ignores) | ~03:08 |
+| P3-7 | `scripts/verify_bootstrap.sh` against stubbed AWS responses | ✅ a correct bootstrap passes 20/20; a broken one fails exactly the 4 broken controls (versioning suspended, wildcard trust, missing role ×2) | 03:11 |
+| P3-8 | shellcheck (new scripts) | ✅ clean | ~03:10 |
+
+### AWS apply
+
+⏳ Pending: owner runs [bootstrap-runbook.md](bootstrap-runbook.md) after this PR merges. Record
+here: the plan line (expected `28 to add, 0 to change, 0 to destroy`), the apply summary, the
+`verify_bootstrap.sh` output, and the `verify_github_settings.sh` output with environments.
+
 ## Phase 2 — CI and security automation (2026-11-23)
 
 ### Local validation (before the first GitHub run)
@@ -27,9 +52,66 @@ been executed, it says so. All times are UTC.
 |---|---|---|
 | Checkov's GitHub Actions scan **silently evaluated 0 checks** on `ci.yml` | Output showed results only for Terraform and Dockerfile; a JSON run reported `resource_count: 0`; bisected to `cancel-in-progress: ${{ … }}` failing Checkov's workflow schema | Literal `cancel-in-progress: true` with a per-commit group on `main`; new `make checkov-guard` (in CI) fails if Checkov evaluates zero workflow checks |
 
-### On GitHub
+### On GitHub: [PR #1](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/pull/1)
 
-Recorded from the pull request's CI runs (see the PR checks and the section below once runs complete).
+| Run | Head | Result | Notes |
+|---|---|---|---|
+| [45096890726](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45096890726) | `e255350` | ❌ `ci-ok` failed (5/6 jobs green) | Workflows job could not install `actionlint-py==1.7.12`: the package uses 4-part versions. **Container job green: Trivy image gate passed on the runner**, so the zlib1g CVE seen only in the sandbox build is fixed (SE-4 closed). Terraform job 2 min 1 s. |
+| [45097129693](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45097129693) | `b586952` | ✅ all 8 checks green, `ci-ok` success 01:55:28 | Pin fixed (`1.7.12.25`). Terraform job down to 1 min 20 s with the in-run provider cache. Checkov SARIF uploaded, so GitHub code scanning is active |
+
+PR #1 was merged by the owner at 2026-11-23 01:56:42 UTC (merge commit `a4a9438`).
+
+### GitHub settings, baseline (owner ran `scripts/verify_github_settings.sh` at 2026-11-23T02:06:44Z)
+
+Run in a Codespace, so `gh` used the Codespace `GITHUB_TOKEN`:
+
+| Control | Result | Meaning |
+|---|---|---|
+| Default branch | ❌ `claude/stoic-volta-i07auh` | Real: still to switch to `main` |
+| `main` ruleset | ❌ no active rules | Real: not yet applied |
+| Secret scanning, push protection, Dependabot, Actions token defaults | reported `unknown`/`null` | **Not readable with the Codespace token**. The script (v1) wrongly printed some of these as FAIL; fixed to report `UNKNOWN` |
+| OIDC subject | `use_immutable_subject: true`, prefix `repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837` | Real: used for Phase 3 trust policies |
+| Repository ID | `1465573837` | Real: recorded as the bootstrap default |
+
+### GitHub settings, applied and verified (owner, 2026-11-23)
+
+The owner signed in to `gh` as the repository owner (`unset GITHUB_TOKEN && gh auth login`) and
+applied the `docs/github-settings.md` commands:
+- `default_branch=main`;
+- secret scanning, push protection and Dependabot security updates enabled (the API response confirmed `"status": "enabled"`);
+- Dependabot alerts enabled;
+- workflow token `read` with `can_approve_pull_request_reviews=false`;
+- ruleset `main-protection` created at 02:26:57Z (id 27869781, enforcement `active`, no bypass actors, `current_user_can_bypass: never`).
+
+`scripts/verify_github_settings.sh` at **2026-11-23T02:27:41Z**:
+
+```text
+PASS     default branch
+PASS     secret scanning
+PASS     secret scanning push protection
+PASS     Dependabot alerts
+PASS     Dependabot security updates
+PASS     default GITHUB_TOKEN permissions
+PASS     Actions cannot approve pull requests (can_approve_pull_request_reviews)
+INFO     fork PR workflow approval policy: first_time_contributors
+PASS     main requires a pull request
+PASS     force pushes to main blocked
+PASS     deletion of main blocked
+PASS     status check ci-ok required on main
+INFO     code-owner review NOT required (expected while the project has a single maintainer - SE-5)
+INFO     OIDC subject customization: use_immutable_subject=true, prefix repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837
+INFO     environments: <none>
+RESULT: all checks passed
+```
+
+GitHub added two ruleset defaults that were not in `main.json`: `require_extra_approval_for_unattributed_changes: true`
+and `allowed_merge_methods: [merge, squash, rebase]`.
+
+Dependabot opened its first PR (#3, Python dev dependencies) at 01:52Z, before the ruleset existed.
+Like every PR, it must now pass `ci-ok` on an up-to-date branch before it can merge.
+
+Not yet demonstrated on GitHub: a deliberately insecure Terraform change failing CI (scenario 3).
+It needs its own PR, because PR #1 merged before the demo commit was pushed.
 
 ## Phase 1 — offline validation (2026-11-23)
 
@@ -99,17 +181,19 @@ build (Phase 2) is the authoritative result and must close E15.
 
 ## Phase 0 — AWS discovery
 
-⏸️ Not executed: no valid AWS credentials (`InvalidClientTokenId`). Owner to run
-`scripts/aws_discovery.sh` (read-only). See [deployment-plan.md §1](deployment-plan.md#1-phase-0--aws-environment-assessment-2026-11-23).
+✅ Run by the owner in AWS CloudShell (us-east-2) at **2026-11-23T02:45:24Z** (from this build
+environment it was blocked: `InvalidClientTokenId`). Redacted results:
+[aws-discovery-2026-11-23.md](aws-discovery-2026-11-23.md). us-east-1: every regional read was an
+explicit SCP deny. us-east-2: no ECS, ALB, NAT, EIP or secrets left; month-to-date cost under $0.01 per service.
 
 ## Required scenarios (Phase 8 checklist)
 
 | # | Scenario | Status |
 |---|---|---|
 | 1 | Developer creates a new service from a template | 📋 Phase 6 |
-| 2 | PR triggers tests and security scans | 🛠️ Phase 2 (`ci.yml`); GitHub run results recorded above |
-| 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9); 📋 in CI on a PR |
-| 4 | Container image built and scanned | ✅ locally (E12, E15, finding open); 📋 in CI |
+| 2 | PR triggers tests and security scans | ✅ PR #1, runs 45096890726 (caught a real failure) and 45097129693 (green) |
+| 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9, P2-9); 📋 on a GitHub PR |
+| 4 | Container image built and scanned | ✅ in CI on GitHub (run 45097129693, Trivy gate passed) |
 | 5 | Approved image published to ECR | 📋 Phase 5 |
 | 6 | Authorized deployment updates ECS Fargate | 📋 Phase 5 |
 | 7 | Unapproved deployment is blocked | 📋 Phase 5 |

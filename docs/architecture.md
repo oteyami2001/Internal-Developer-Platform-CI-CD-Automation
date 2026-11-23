@@ -116,17 +116,17 @@ and `backend.hcl`. Environments cannot drift structurally, because there is only
 | `load-balancer` | ALB, ALB SG, target group, HTTP/HTTPS listeners | Ingress must be `/32` without HTTPS; ≥2 subnets; `drop_invalid_header_fields` | 4 |
 | `ecs-cluster` | Cluster, capacity providers | Container Insights off in dev (cost) | 4 |
 | `ecs-service` | Task definition, service, task SG, log group | ✅ image **must** be `ECR@sha256:` digest; ✅ valid Fargate size; ✅ unprivileged port; ✅ secrets only under `idp/`; ✅ stop timeout > app drain. Read-only root FS and non-root user are hard-coded, not inputs | 4–5 |
-| `ecr` | Repositories, lifecycle and repository policies | Tag immutability hard-coded; scan on push; keep ≥3 images for rollback | 3 |
-| `iam-oidc` | GitHub OIDC provider; plan / apply / image-push / deploy roles | Exact `sub` match, no wildcards, **no `pull_request` trust**; region-locked writes; 15–60 min sessions | 3 |
-| `security` | Workload permissions boundary, ECS execution and task roles | Boundary required on every created role; secrets scoped per service | 3–4 |
+| `ecr` | Repositories, lifecycle and repository policies | ✅ Tag immutability + scan on push hard-coded; KMS; keep ≥3 images; **only the image-push role can push** (repository policy) | 🛠️✅ Phase 3 |
+| `iam-oidc` | plan / apply / deploy roles per environment + image-push role (the shared OIDC provider is looked up by the bootstrap) | ✅ Exact immutable `sub`, `aud` bound, **no `pull_request` trust**; plan role read-only except its `.tflock`; region-locked writes; boundary required for role creation; explicit deny on `aiops` resources, CI roles and audit settings | 🛠️✅ Phase 3 |
+| `security` | Workload permissions boundary per environment (ECS execution/task roles move to `ecs-service`, Phase 4) | ✅ Denies `iam:*`, Organizations, billing, CloudTrail tampering; secrets limited to `idp/<env>/*` | 🛠️✅ Phase 3 |
 | `observability` | SNS, alarms, dashboard, ECS deployment events | Bounded retention | 4, 7 |
-| `budgets` | Monthly cost budget with actual and forecast alerts | 1–200 USD | 3 |
+| `budgets` | Monthly cost budget with actual and forecast alerts | ✅ Tag-filtered (`Project=idp`), 50/80/100% actual + 100% forecast | 🛠️✅ Phase 3 |
 
 Root configurations:
 
 | Root | Applied by | State | Contents |
 |---|---|---|---|
-| `terraform/bootstrap` | Administrator, once, from a workstation (Phase 3, after approval) | Local first, then migrated to the bucket it creates | State bucket, CI roles (shared OIDC provider looked up), boundary, ECR, project budget |
+| `terraform/bootstrap` 🛠️✅ | Administrator, once, from **AWS CloudShell** ([bootstrap-runbook.md](bootstrap-runbook.md)) | Local first, then migrated to the bucket it creates (`bootstrap/terraform.tfstate`) | State bucket, CloudTrail trail + bucket, CI roles (shared OIDC provider looked up), boundary, ECR, project budget: 28 resources |
 | `terraform/stack` | `terraform-apply.yml` via the apply role, after approval | `envs/<env>/terraform.tfstate` + native lock file | Everything per environment |
 
 Cross-cutting rules (implemented ✅ now): Terraform `>= 1.10` (native S3 locking), AWS provider

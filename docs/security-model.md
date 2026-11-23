@@ -13,19 +13,19 @@ Status legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁�
 
 ## 2. Identity and access
 
-### 2.1 GitHub OIDC roles 📋 (Phase 3; interface 🛠️ in `terraform/modules/iam-oidc`)
+### 2.1 GitHub OIDC roles 🛠️✅ (`terraform/modules/iam-oidc`, 8 offline tests; ☁️ after the bootstrap apply)
 
 | Role | Trusted `sub` (exact `StringEquals`) | Allowed | Explicitly not allowed |
 |---|---|---|---|
 | `idp-<env>-github-plan` | `repo:oteyami2001/Internal-Developer-Platform-CI-CD-Automation:environment:<env>-plan` | Describe/List/Get of project services; read state + write lock file | Data reads (S3 objects outside state, Secrets values, logs content), any write |
 | `idp-<env>-github-apply` | `…:environment:<env>` | Writes to project services, **conditioned on `aws:RequestedRegion`**; IAM only on `idp-<env>-*` roles **with the permissions boundary** | Creating users or access keys, removing boundaries, Organizations/account, CloudTrail tampering, editing CI roles |
-| `idp-github-image-push` | `…:ref:refs/heads/main` | `ecr:GetAuthorizationToken`; push to project repositories | Delete images, change repository policy or mutability |
+| `idp-github-image-push` | `…:ref:refs/heads/main` | `ecr:GetAuthorizationToken`; push to `idp/*` repositories (and the repositories' own policy denies pushes from **any other principal**, administrators included) | Delete images, change repository policy or mutability |
 | `idp-<env>-github-deploy` | `…:environment:<env>-deploy` | `ecs:RegisterTaskDefinition`, `ecs:UpdateService`/`Describe*` on one cluster; `iam:PassRole` for that env's task/execution roles only | Terraform state, any other service |
 
 All trust policies also require `aud = sts.amazonaws.com`. **No role trusts `pull_request`**
-([ADR 0003](adr/0003-no-oidc-trust-for-pull-requests.md)). Subjects shown in the short form; if the
-repository uses immutable-ID subjects (as the AIOps repository does) they become
-`repo:oteyami2001@<owner_id>/Internal-Developer-Platform-CI-CD-Automation@<repo_id>:…`, verified in Phase 3.
+([ADR 0003](adr/0003-no-oidc-trust-for-pull-requests.md)). Subjects are shown in the short form. This
+repository uses **immutable-ID subjects** (verified via the GitHub API on 2026-11-23), so the real
+prefix is `repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837`.
 
 ### 2.1a Shared account ([ADR 0005](adr/0005-shared-account-with-aiops-project.md))
 
@@ -35,12 +35,12 @@ other's roles. The `idp` apply role will add `aws:ResourceTag/Project = idp` con
 support them, and explicitly deny writes to `aiops-*` IAM, S3 and ECR resources. The AIOps apply
 role is broader (`ecs:*`, `elasticloadbalancing:*` on `*` in us-east-2), which is exception SE-6.
 
-### 2.2 Permissions boundary 📋
+### 2.2 Permissions boundary 🛠️✅ (`terraform/modules/security`)
 Every role created by the apply role must carry the workload boundary (an `iam:PermissionsBoundary`
 condition on `CreateRole`/`Put*Policy`), as in the previous project, whose boundary design is reused
 after review. The boundary denies IAM writes, Organizations/account/billing and CloudTrail changes.
 
-### 2.3 Workload roles 📋
+### 2.3 Workload roles 📋 (Phase 4, `ecs-service`)
 - **Execution role** (per service): pull from its ECR repository, write its log group, read only
   `idp/<env>/<service>/*` secrets.
 - **Task role** (per service): empty by default. The sample app calls no AWS APIs.
@@ -82,7 +82,7 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | Multi-stage build, pip/setuptools removed from runtime image | 🛠️✅ (verified `no-pip` in container) |
 | Non-root UID 10001, read-only root FS, all capabilities dropped | 🛠️✅ (local container smoke test) |
 | `apt-get update --error-on=any`: unreachable mirrors fail the build | 🛠️✅ (found in Phase 1: without it the build silently skipped OS patches) |
-| Trivy image gate (HIGH/CRITICAL with fixes) | 🛠️ `ci.yml` `container` job. Locally **1 HIGH** (zlib1g, SE-4); the GitHub-runner build is the authoritative result |
+| Trivy image gate (HIGH/CRITICAL with fixes) | ✅ `ci.yml` `container` job passes on GitHub runners (run 45097129693). The sandbox-only zlib1g finding (SE-4) is closed |
 | Trivy filesystem scan (dependencies, misconfig, secrets) | 🛠️ `ci.yml` `trivy-fs` · ✅ locally 0 findings |
 | Exact dependency pins; Dependabot for pip, Docker digests, Actions SHAs and Terraform providers (with release cooldowns) | 🛠️ `.github/dependabot.yml` |
 | GitHub Actions pinned to full commit SHAs (verified against upstream tags); `permissions: {}` + per-job grants; no `pull_request_target`; no `${{ }}` in `run:` | 🛠️✅ `test_repo_hygiene.py` (mutation-tested: an unpinned action, `id-token: write` in CI, and an expression injection each fail) |
@@ -102,8 +102,12 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 
 ## 7. Audit and evidence
 
-- CloudTrail (account trail: existence to be confirmed by discovery) records every role session.
-  The OIDC `sub` appears in the `AssumeRoleWithWebIdentity` event.
+- CloudTrail: discovery found **no trail** in the account (only the 90-day Event history). Owner
+  decision 2026-11-23: the bootstrap adds `idp-management-events` 🛠️✅, a single-Region trail of
+  management events (read + write, including IAM/STS global events, so every
+  `AssumeRoleWithWebIdentity` with its OIDC `sub`). It has log file validation (tamper-evident
+  digests) and goes to a versioned, TLS-only bucket whose policy denies log deletion and allows
+  CloudTrail writes only for this trail (`aws:SourceArn`). Retention is 365 days.
 - GitHub records environment approvals (who, when) and deployment history.
 - `docs/portfolio-evidence.md` records timestamped, real results only.
 
@@ -114,7 +118,7 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | SE-1 | Dev Fargate task in a public subnet with a public IP | Avoids NAT Gateway cost (~$33+/month) for a demo | Task SG allows only the ALB SG; demo-only lifetime; prod reference uses private subnets | Phase 4 |
 | SE-2 | Dev ALB over HTTP | No domain or certificate for the demo | Terraform rejects anything but `/32` ingress without HTTPS (✅ tested); no credentials over the endpoint | Phase 4 |
 | SE-3 | `# nosec B506` on `yaml.load` in `scripts/validate_service.py` | Loader is a `yaml.SafeLoader` subclass (adds a duplicate-key check). Bandit cannot see the subclass | `test_yaml_tags_cannot_execute_code` proves `!!python` tags are rejected | Permanent |
-| SE-4 | Local image has 1 HIGH OS CVE (zlib1g CVE-2026-85091, fix available) | This sandbox's network policy blocks Debian mirrors, so `apt-get upgrade` cannot run here. The Dockerfile now **fails** rather than skipping the upgrade | Image never published. Phase 2 CI on GitHub runners must show the CVE fixed before any push | Phase 2 (must close) |
+| ~~SE-4~~ **Closed 2026-11-23** | Local image had 1 HIGH OS CVE (zlib1g CVE-2026-85091, fix available) | This sandbox's network policy blocks Debian mirrors, so `apt-get upgrade` cannot run here. The Dockerfile now **fails** rather than skipping the upgrade | Image never published. **Closed:** the GitHub-runner build passed the Trivy HIGH/CRITICAL gate in runs 45096890726 and 45097129693 | Closed |
 | SE-6 | Shared account with the AIOps project, whose apply role can write ECS/ELB/VPC resources account-wide in us-east-2 | Owner decision to reuse the account (ADR 0005) | AIOps pipeline is manual and approval-gated, and its environment is destroyed. `idp` resources are tagged and monitored for drift; recommend tag conditions in the AIOps repo | Phase 3 |
 | SE-5 | Single maintainer: environment approvals cannot be two-person, and the `main` ruleset requires 0 approvals and no code-owner review (an author cannot approve their own PR) | Solo portfolio project | PR + `ci-ok` required, no force push or deletion, no bypass actors; approval gates still force a deliberate, logged human step; raise to 1 approval + code-owner review when a second maintainer joins | Ongoing |
 | SE-7 | TFLint `terraform_unused_declarations` ignored file-by-file in skeleton `variables.tf` | Interface-only skeletons declare inputs that nothing uses yet | Other rules still apply (verified); `test_unused_declaration_ignore_only_while_skeleton` fails as soon as a configuration gains resources | Phase 3/4 (auto-enforced) |

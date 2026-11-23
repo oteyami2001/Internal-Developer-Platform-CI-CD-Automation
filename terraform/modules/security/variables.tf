@@ -1,35 +1,31 @@
-# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
-# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
-
-# MODULE CONTRACT (Phase 1 skeleton - resources are implemented in Phase 3/4)
+# Workload permissions boundary for one environment.
 #
-# Planned resources:
-#   aws_iam_policy  workload permissions boundary (ceiling for every role the platform creates:
-#                   no IAM writes, no Organizations/account/billing, no CloudTrail tampering)
-#   aws_iam_role    ECS task execution role per service (pull from its ECR repo, write its log group,
-#                   read ONLY secrets under idp/<env>/<service>/*)
-#   aws_iam_role    ECS task role per service (empty by default - the sample app needs no AWS access)
-# Service manifests have no IAM fields, so developers cannot widen these roles.
+# A boundary is a CEILING: a role's effective permissions are the intersection of the boundary and
+# its own policies. The environment's apply role can only create or change roles that carry this
+# boundary (iam-oidc: ManageEnvironmentRolesWithBoundaryOnly). So even a role that someone attaches
+# AdministratorAccess to cannot write IAM, touch Organizations/billing or tamper with CloudTrail.
+# Per-service ECS execution/task roles are created with it by the ecs-service module (Phase 4).
 
-variable "name_prefix" {
-  type = string
+variable "project" {
+  description = "Resource name prefix."
+  type        = string
 }
 
 variable "environment" {
-  type = string
+  description = "Environment this boundary applies to."
+  type        = string
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be dev, staging or prod."
+  }
 }
 
-variable "services" {
-  description = "Service names from the validated catalog."
-  type        = list(string)
+variable "account_id" {
+  description = "AWS account ID."
+  type        = string
 }
 
-variable "ecr_repository_arns" {
-  description = "Service name -> ECR repository ARN."
-  type        = map(string)
-}
-
-variable "tags" {
-  type    = map(string)
-  default = {}
+variable "region" {
+  description = "Region of the workload's secrets."
+  type        = string
 }
