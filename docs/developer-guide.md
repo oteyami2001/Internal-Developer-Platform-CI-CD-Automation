@@ -61,6 +61,12 @@ breaker, 1 task).
 
 ## 2. Local workflow (works today)
 
+**Python 3.13 is the project standard** ([ADR 0006](adr/0006-python-3-13-standard.md)). The easiest
+setup is a **GitHub Codespace**: `.devcontainer/devcontainer.json` gives Python 3.13, the GitHub
+CLI, Terraform 1.17.2 + TFLint and Docker, and installs the dev requirements. Rebuild an existing
+Codespace (Command Palette → *Codespaces: Rebuild Container*) to pick it up. Locally,
+`.python-version` pins 3.13 for pyenv/uv.
+
 ```bash
 make install            # Python dev tooling
 make validate-services  # schema + policy for every apps/*/service.yaml

@@ -79,6 +79,7 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | Control | Status |
 |---|---|
 | Base image pinned by digest, not a build argument | 🛠️✅ (Checkov 85/85 Dockerfile checks pass) |
+| Python 3.13 everywhere; Dependabot proposes only digest/patch refreshes of the base image, never a Python minor/major jump ([ADR 0006](adr/0006-python-3-13-standard.md)) | 🛠️✅ enforced by `test_repo_hygiene.py` (a replay of Dependabot PR #2 fails CI) |
 | Multi-stage build, pip/setuptools removed from runtime image | 🛠️✅ (verified `no-pip` in container) |
 | Non-root UID 10001, read-only root FS, all capabilities dropped | 🛠️✅ (local container smoke test) |
 | `apt-get update --error-on=any`: unreachable mirrors fail the build | 🛠️✅ (found in Phase 1: without it the build silently skipped OS patches) |

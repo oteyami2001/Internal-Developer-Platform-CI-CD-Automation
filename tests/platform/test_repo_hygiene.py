@@ -3,8 +3,10 @@
 These turn conventions into failing tests, so a future change cannot quietly weaken them.
 """
 
+import json
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -143,3 +145,50 @@ def test_committed_tfvars_hold_no_identifying_values():
         for name in ("aws_account_id", "alert_email", "allowed_ingress_cidrs"):
             assert not re.search(rf"^\s*{name}\s*=", text, re.M), f"{path}: {name} must come from TF_VAR_*"
         assert not re.search(r"\b\d{12}\b", text), f"{path}: looks like an AWS account ID"
+
+
+# --- Python version standard (ADR 0006): everything says 3.13, nothing drifts silently ---------
+PYTHON_STANDARD = "3.13"
+
+
+def test_dockerfile_stages_use_digest_pinned_python_standard():
+    froms = re.findall(r"^FROM\s+(\S+)", (ROOT / "apps" / "sample-api" / "Dockerfile").read_text(), re.M)
+    assert froms, "no FROM lines"
+    for image in froms:
+        assert re.fullmatch(rf"python:{re.escape(PYTHON_STANDARD)}-slim@sha256:[0-9a-f]{{64}}", image), image
+
+
+def test_ci_python_version_is_the_standard():
+    ci = load_workflow(ROOT / ".github" / "workflows" / "ci.yml")
+    assert str(ci["env"]["PYTHON_VERSION"]) == PYTHON_STANDARD
+
+
+def test_pyproject_targets_the_standard():
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert data["project"]["requires-python"] == ">=3.13,<3.14"
+    assert data["tool"]["ruff"]["target-version"] == "py313"
+
+
+def test_dev_environment_uses_the_standard():
+    assert (ROOT / ".python-version").read_text(encoding="utf-8").strip() == PYTHON_STANDARD
+    text = (ROOT / ".devcontainer" / "devcontainer.json").read_text(encoding="utf-8")
+    devcontainer = json.loads("\n".join(line for line in text.splitlines() if not line.lstrip().startswith("//")))
+    assert devcontainer["image"].endswith(f":1-{PYTHON_STANDARD}-bookworm"), devcontainer["image"]
+
+
+def test_service_runtime_is_the_standard():
+    schema = json.loads((ROOT / "platform" / "schemas" / "service.schema.json").read_text(encoding="utf-8"))
+    assert schema["properties"]["spec"]["properties"]["runtime"]["enum"] == [f"python{PYTHON_STANDARD}"]
+    for manifest in (ROOT / "apps").glob("*/service.yaml"):
+        assert yaml.safe_load(manifest.read_text(encoding="utf-8"))["spec"]["runtime"] == f"python{PYTHON_STANDARD}"
+
+
+def test_dependabot_never_proposes_python_minor_or_major_jumps():
+    config = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+    docker = [u for u in config["updates"] if u["package-ecosystem"] == "docker"]
+    assert docker, "docker ecosystem missing"
+    for update in docker:
+        rules = [r for r in update.get("ignore", []) if r.get("dependency-name") == "python"]
+        assert rules, "python base image must have an ignore rule"
+        types = {t for r in rules for t in r.get("update-types", [])}
+        assert types == {"version-update:semver-major", "version-update:semver-minor"}, types

@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: "3.13"
+  PYTHON_VERSION: "3.13" # project standard (ADR 0006); latest 3.13.x patch on each run
   TF_VERSION: 1.17.2
   TFLINT_VERSION: v0.66.0
   TRIVY_VERSION: v0.76.2

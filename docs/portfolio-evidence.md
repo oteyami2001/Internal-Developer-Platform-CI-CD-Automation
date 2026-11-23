@@ -3,6 +3,17 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Python version standard (2026-11-23, ADR 0006)
+
+Owner decision: stay on Python 3.13; Dependabot PR #2 (base image 3.13 → 3.15) is reverted.
+
+| # | Check | Result |
+|---|---|---|
+| PY-1 | All runtime + dev dependencies (36 distributions) resolve as CPython 3.13 wheels only, linux/x86_64 and linux/arm64 | ✅ |
+| PY-2 | Direct pins declare 3.13 support (`requires_python`); compiled deps ship `cp313` wheels (pydantic-core, PyYAML, rpds-py, coverage) | ✅ (`httpx` 0.28.1 has no 3.13 classifier; pure Python, tested on 3.13 in CI) |
+| PY-3 | Latest `python:3.13-slim` = Python 3.13.18, multi-arch digest `e48f59cd…` (same image CI scanned in Phase 2) | ✅ |
+| PY-4 | Consistency tests: replaying PR #2, allowing Dependabot minor jumps, and moving CI to 3.15 each fail `test_repo_hygiene.py` | ✅ 3/3 caught |
+
 ## Phase 3 — Terraform bootstrap (2026-11-23)
 
 Approved by the owner on 2026-11-23 with a $25 project budget and the CloudTrail trail. Code and
@@ -23,6 +34,10 @@ offline tests are done; **the AWS apply is performed by the owner** from CloudSh
 | P3-8 | shellcheck (new scripts) | ✅ clean | ~03:10 |
 
 ### AWS apply
+
+**Runbook steps 1–2 done** (owner, CloudShell, 2026-11-23): Terraform 1.17.2 installed,
+`aws sts get-caller-identity` returned the expected account, Region us-east-2, role
+`AccountFullAccessRole`.
 
 ⏳ Pending: owner runs [bootstrap-runbook.md](bootstrap-runbook.md) after this PR merges. Record
 here: the plan line (expected `28 to add, 0 to change, 0 to destroy`), the apply summary, the
