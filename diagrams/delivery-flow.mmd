@@ -1,0 +1,26 @@
+%% Delivery flow as verified in AWS (2026-11-23): from pull request to a running, verified release.
+%% Every arrow into AWS uses short-lived OIDC credentials; every change to AWS has a human approval.
+sequenceDiagram
+  autonumber
+  actor Dev as Developer
+  participant GH as GitHub (PR + ruleset)
+  participant CI as ci.yml (no AWS access)
+  participant IB as image-build.yml
+  participant ECR as ECR (immutable)
+  actor Owner as Owner (reviewer)
+  participant AD as app-deploy.yml
+  participant ECS as ECS Fargate + ALB
+  participant CW as CloudWatch / SNS
+
+  Dev->>GH: pull request (code + service.yaml)
+  GH->>CI: tests, Ruff, Bandit, Terraform tests, TFLint, Checkov, Trivy
+  CI-->>GH: ci-ok (required) - insecure change = red, merge blocked
+  Dev->>GH: merge to main
+  GH->>IB: build, hardened smoke test, Trivy gate, SBOM
+  IB->>ECR: push git-<commit> (single manifest), publish sha256 digest
+  Dev->>AD: run with image digest
+  AD->>Owner: wait for dev-deploy approval
+  Owner-->>AD: approve (reject = job never starts, no credentials)
+  AD->>ECS: new task-definition revision, only the image changed
+  ECS-->>AD: rollout COMPLETED + healthy target (or FAILED -> circuit breaker rollback)
+  ECS->>CW: deployment events, JSON logs, alarms -> e-mail
