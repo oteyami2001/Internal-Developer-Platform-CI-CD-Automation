@@ -2,7 +2,7 @@
 name = "internal-developer-platform"
 version = "0.1.0"
 description = "Self-service Internal Developer Platform on AWS (ECS Fargate, Terraform, GitHub Actions)"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14" # project standard: Python 3.13 (ADR 0006)
 
 [tool.pytest.ini_options]
 testpaths = ["apps/sample-api/tests", "tests"]

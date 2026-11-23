@@ -1,0 +1,18 @@
+{
+  // Codespaces / dev container for this repository. Python 3.13 is the project standard (ADR 0006):
+  // the 1-3.13-bookworm tag receives 3.13 patch updates but never a different minor version.
+  "name": "idp (Python 3.13)",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.13-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/terraform:1": { "version": "1.17.2", "tflint": "0.66.0" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "python -m pip install --user --disable-pip-version-check -r requirements-dev.txt",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff", "hashicorp.terraform"],
+      "settings": { "python.defaultInterpreterPath": "/usr/local/bin/python" }
+    }
+  }
+}

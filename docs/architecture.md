@@ -193,3 +193,4 @@ sequenceDiagram
 - [ADR 0003](adr/0003-no-oidc-trust-for-pull-requests.md): no AWS role is assumable from pull requests.
 - [ADR 0004](adr/0004-static-generated-service-catalog.md): generated static catalog instead of a Backstage server.
 - [ADR 0005](adr/0005-shared-account-with-aiops-project.md): reuse the AIOps account (us-east-2), keep all of its resources.
+- [ADR 0006](adr/0006-python-3-13-standard.md): Python 3.13 is the standard; no automatic minor-version upgrades.

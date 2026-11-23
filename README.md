@@ -6,7 +6,7 @@ small, validated manifest and ship it through pull requests and approval-gated p
 networking or arbitrary AWS resources.
 
 **Stack:** AWS (ECS Fargate, ECR, ALB, VPC, IAM, CloudWatch, SNS, Budgets) · Terraform · GitHub
-Actions + OIDC · Python/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
+Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
 
 > **Project status: Phase 3 (bootstrap) implemented and tested offline, in review. Nothing is deployed to AWS yet.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.

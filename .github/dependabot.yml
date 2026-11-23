@@ -29,6 +29,11 @@ updates:
       interval: weekly
     cooldown:
       default-days: 3
+    # Python 3.13 is the project standard (ADR 0006). Digest refreshes of python:3.13-slim (OS and
+    # Python patch releases) are still proposed; a minor/major jump such as 3.13 -> 3.15 is not.
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: terraform
     directories: ["/terraform/stack", "/terraform/bootstrap"]
