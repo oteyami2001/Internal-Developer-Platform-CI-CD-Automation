@@ -128,6 +128,10 @@ resource "aws_ecs_task_definition" "this" {
     cpu_architecture        = "X86_64"
   }
 
+  # ECS stores every container definition in a normalised form. Any default it fills in that is
+  # missing here shows up as a diff that forces REPLACEMENT on every plan (found in the first
+  # post-apply drift check, Phase 5). So the defaults are written out: hostPort (= containerPort
+  # in awsvpc mode), and the empty lists mountPoints, volumesFrom, systemControls, capabilities.add.
   container_definitions = jsonencode([{
     name                   = var.service_name
     image                  = var.image
@@ -136,10 +140,13 @@ resource "aws_ecs_task_definition" "this" {
     readonlyRootFilesystem = true
     privileged             = false
     stopTimeout            = var.stop_timeout_seconds
-    portMappings           = [{ containerPort = var.container_port, protocol = "tcp" }]
+    portMappings           = [{ containerPort = var.container_port, hostPort = var.container_port, protocol = "tcp" }]
+    mountPoints            = []
+    volumesFrom            = []
+    systemControls         = []
     environment            = [for k in sort(keys(local.environment)) : { name = k, value = local.environment[k] }]
     secrets                = [for k in sort(keys(var.secret_arns)) : { name = k, valueFrom = var.secret_arns[k] }]
-    linuxParameters        = { capabilities = { drop = ["ALL"] } }
+    linuxParameters        = { capabilities = { add = [], drop = ["ALL"] } }
     healthCheck = {
       command     = ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:${var.container_port}/health', timeout=2).status == 200 else 1)"]
       interval    = 15
