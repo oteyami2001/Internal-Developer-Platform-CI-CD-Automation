@@ -71,8 +71,8 @@ tflint: ## TFLint (terraform + AWS rulesets) across all Terraform
 	tflint --init --config "$(CURDIR)/.tflint.hcl"
 	tflint --recursive --config "$(CURDIR)/.tflint.hcl" --chdir terraform --format compact
 
-image: ## Build the sample-api image
-	docker build \
+image: ## Build the sample-api image (one plain image manifest: no attestation index, see push_image.sh)
+	docker build --provenance=false --sbom=false \
 	  --build-arg APP_VERSION=$$(git describe --tags --always 2>/dev/null || echo 0.0.0-dev) \
 	  --build-arg GIT_SHA=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) \
 	  --build-arg BUILD_TIME=$$(date -u +%Y-%m-%dT%H:%M:%SZ) \

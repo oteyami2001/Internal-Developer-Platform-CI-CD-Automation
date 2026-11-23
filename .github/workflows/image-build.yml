@@ -16,6 +16,8 @@ on:
     paths:
       - "apps/sample-api/**"
       - ".github/workflows/image-build.yml"
+      - "scripts/push_image.sh"
+      - "Makefile"
   workflow_dispatch:
 
 permissions: {}

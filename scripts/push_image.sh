@@ -27,8 +27,17 @@ else
   PUSHED="yes"
 fi
 
-DIGEST=$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids "imageTag=$TAG" --output json | jq -r '.imageDetails[0].imageDigest')
+aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids "imageTag=$TAG" --output json >"$WORK/pushed.json"
+DIGEST=$(jq -r '.imageDetails[0].imageDigest' "$WORK/pushed.json")
 [[ $DIGEST =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::could not read the pushed image digest"; exit 1; }
+# The tag must point at ONE image manifest, not an image index. An index (for example from BuildKit
+# provenance attestations) leaves its child manifests UNTAGGED in ECR, and the lifecycle rule
+# "expire untagged after 1 day" may then delete the layers a running service still needs to pull.
+MEDIA=$(jq -r '.imageDetails[0].imageManifestMediaType // "unknown"' "$WORK/pushed.json")
+case "$MEDIA" in
+  application/vnd.oci.image.manifest.v1+json | application/vnd.docker.distribution.manifest.v2+json) ;;
+  *) echo "::error::$ECR_REPOSITORY:$TAG is a $MEDIA, not a single image manifest. Build with --provenance=false --sbom=false (make image)."; exit 1 ;;
+esac
 
 echo "Published $ECR_REPOSITORY:$TAG = $DIGEST"
 if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "digest=$DIGEST" >>"$GITHUB_OUTPUT"; fi
