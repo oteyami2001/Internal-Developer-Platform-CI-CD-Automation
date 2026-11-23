@@ -39,7 +39,23 @@ offline tests are done; **the AWS apply is performed by the owner** from CloudSh
 `aws sts get-caller-identity` returned the expected account, Region us-east-2, role
 `AccountFullAccessRole`.
 
-⏳ Pending: owner runs [bootstrap-runbook.md](bootstrap-runbook.md) after this PR merges. Record
+**GitHub environments configured and verified** (owner, 2026-11-23): `scripts/configure_github_environments.sh`
+created `dev-plan`, `dev` and `dev-deploy`. Then `scripts/verify_github_settings.sh` returned
+`RESULT: all checks passed`:
+
+```text
+PASS     environment dev requires a reviewer
+PASS     environment dev deploys only from main
+PASS     environment dev-deploy requires a reviewer
+PASS     environment dev-deploy deploys only from main
+INFO     environment dev-plan: reviewers=0 branch policy=custom
+PASS     environment dev-plan deploys only from main
+```
+
+(The `main` ruleset, secret scanning, Dependabot and Actions-token checks also still PASS. The OIDC
+subject is unchanged: immutable prefix `repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837`.)
+
+⏳ Pending: owner runs [bootstrap-runbook.md](bootstrap-runbook.md) steps 3–8 in CloudShell. Record
 here: the plan line (expected `28 to add, 0 to change, 0 to destroy`), the apply summary, the
 `verify_bootstrap.sh` output, and the `verify_github_settings.sh` output with environments.
 
