@@ -171,10 +171,13 @@ jobs:
           output_file_path: console,checkov.sarif
           soft_fail: false # any finding without an inline, justified skip fails the build
           download_external_modules: false
-      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+      - name: Upload only unsuppressed findings (justified inline skips stay in the code)
         if: always() && hashFiles('checkov.sarif') != ''
+        run: scripts/sarif_unsuppressed.sh checkov.sarif checkov-unsuppressed.sarif
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        if: always() && hashFiles('checkov-unsuppressed.sarif') != ''
         with:
-          sarif_file: checkov.sarif
+          sarif_file: checkov-unsuppressed.sarif
           category: checkov
 
   trivy-fs:

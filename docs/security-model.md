@@ -89,6 +89,7 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | Exact dependency pins; Dependabot for pip, Docker digests, Actions SHAs and Terraform providers (with release cooldowns) | 🛠️ `.github/dependabot.yml` |
 | GitHub Actions pinned to full commit SHAs (verified against upstream tags); `permissions: {}` + per-job grants; no `pull_request_target`; no `${{ }}` in `run:` | 🛠️✅ `test_repo_hygiene.py` (mutation-tested: an unpinned action, `id-token: write` in CI, and an expression injection each fail) |
 | Workflow linters: actionlint, zizmor (Actions security), Checkov `github_actions` + a guard that fails if Checkov evaluated zero checks | 🛠️✅ |
+| Code scanning receives only **unsuppressed** Checkov findings (`scripts/sarif_unsuppressed.sh`). Each inline `checkov:skip` carries its justification and is reviewed in the PR diff and in §8 here, so it isn't re-raised as an alert on every PR (owner decision 2026-11-23). Real findings still alert, and still fail CI | 🛠️✅ `test_sarif_filter.py` |
 | Terraform provider lock files for 5 platforms, CI `init -lockfile=readonly` | 🛠️✅ |
 | SBOM (Syft/Trivy CycloneDX) attached to each image build | 📋 Phase 5 |
 | ECR tag immutability + scan on push | 📋 Phase 3 |
