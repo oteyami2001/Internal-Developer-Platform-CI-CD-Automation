@@ -96,7 +96,8 @@ make image smoke                                                  # hardened con
 ## 4. Shipping a change 📋 (Phases 2–5)
 
 1. Branch, change code and/or `service.yaml`, open a PR (template checklist).
-2. `ci.yml` runs every check; failures block merge. Platform-file changes need CODEOWNERS approval.
+2. `ci.yml` runs every check 🛠️; the single required status `ci-ok` blocks merge on any failure.
+   Run `make check` first to see the same results locally.
 3. Merge to `main`, then `image-build.yml` builds, scans and pushes, and records `image@sha256:…`.
 4. Request a deployment (`app-deploy.yml`, or the deploy-request issue form in Phase 6) with that digest.
 5. A reviewer approves the `dev-deploy` environment; the workflow deploys and reports health.

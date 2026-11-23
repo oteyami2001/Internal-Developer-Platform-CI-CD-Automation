@@ -53,7 +53,7 @@ flowchart LR
 |---|---|---|
 | Developer experience | Service manifest + JSON Schema + policy validator, generated service catalog, PR template, CODEOWNERS | 🛠️✅ (manifest, validator, catalog) · 📋 (repository template, deploy-request issue form: Phase 6) |
 | Workload | FastAPI sample service, multi-stage non-root image | 🛠️✅ (offline + local container) |
-| CI | `ci.yml` (pytest, Ruff, Bandit, manifest, catalog, Terraform fmt/validate/test, TFLint, Checkov, Trivy) | 📋 Phase 2 (`make check` runs the offline subset today) 🛠️✅ |
+| CI | `ci.yml` (pytest, Ruff, Bandit, manifest, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov, Trivy, actionlint, zizmor, shellcheck) with a single `ci-ok` gate | 🛠️✅ Phase 2 |
 | CD | `terraform-plan`, `terraform-apply`, `image-build`, `app-deploy`, `drift-detection`, `cleanup` | 📋 Phases 3–7 |
 | Infrastructure | Terraform bootstrap, environment stack, 9 modules | 🛠️✅ interfaces + guardrail tests · 📋 resources (Phases 3–4) |
 | Operations | Health checks, circuit breaker, alarms, rollback, drift detection | 🛠️ app health/readiness · 📋 the rest |
@@ -165,7 +165,7 @@ sequenceDiagram
 
 | Workflow | Trigger | AWS role / GitHub environment | Behaviour | Safeguards |
 |---|---|---|---|---|
-| `ci.yml` | `pull_request`, `push` | **none** | pytest + coverage gate, Ruff, Bandit, manifest validation, catalog check, `terraform fmt/validate/test`, TFLint, Checkov, Trivy (fs + image), secret scan | Read-only `GITHUB_TOKEN`, SHA-pinned actions, `pipefail`, no credentials, safe for fork PRs |
+| `ci.yml` 🛠️ | `pull_request`, `push` to `main` | **none** | pytest + coverage gate, Ruff, Bandit, manifest validation, catalog check, `terraform fmt/validate/test` + per-env data tests, TFLint, Checkov (IaC, Dockerfile, Actions, secrets), Trivy (repo + image), actionlint, zizmor, shellcheck; `ci-ok` aggregates them | `permissions: {}` + per-job read, SHA-pinned actions, `pipefail`, read-only provider lock files, no credentials, safe for fork PRs; rules enforced by `test_repo_hygiene.py` |
 | `terraform-plan.yml` | `push` to `main`, `workflow_dispatch` | plan role / `dev-plan` | `init`, account + region check, `plan -out`, SHA-256 of plan, summary in job summary, plan uploaded as a short-retention artifact | Plan treated as sensitive (no `show` of values in logs), `-lock-timeout`, concurrency group per env |
 | `terraform-apply.yml` | `workflow_dispatch` (plan run id) | apply role / `dev` (required reviewer, `main` only) | Downloads **that** plan, verifies SHA-256 and commit SHA, applies it, records evidence | Never re-plans; stale plan fails; one apply at a time |
 | `image-build.yml` | `push` to `main` (app paths), `workflow_dispatch` | image-push role / (branch `main` subject) | Build, smoke test (read-only FS, UID check), Trivy HIGH/CRITICAL gate, push, record `image@sha256` + SBOM | No `latest` tag, immutable repo, push only after scan passes |

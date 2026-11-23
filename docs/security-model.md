@@ -62,7 +62,8 @@ Two layers, both run in `make check` and (Phase 2) in required CI checks:
 | Service name unique, matches its directory | Validator | `test_name_must_match_directory`, `test_duplicate_service_names_across_manifests` |
 
 Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platform team via
-`CODEOWNERS`. This only works once branch protection requires code-owner review (📋 Phase 2, verify).
+`CODEOWNERS`. Code-owner review cannot be required while there is a single maintainer (SE-5); the
+`main` ruleset still forces every change through a PR with a green `ci-ok`.
 
 ## 4. Infrastructure guardrails (🛠️✅ today, offline `terraform test`)
 
@@ -81,9 +82,12 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | Multi-stage build, pip/setuptools removed from runtime image | 🛠️✅ (verified `no-pip` in container) |
 | Non-root UID 10001, read-only root FS, all capabilities dropped | 🛠️✅ (local container smoke test) |
 | `apt-get update --error-on=any`: unreachable mirrors fail the build | 🛠️✅ (found in Phase 1: without it the build silently skipped OS patches) |
-| Trivy image gate (HIGH/CRITICAL with fixes) | 🛠️ run locally: **1 HIGH found** (zlib1g, see §8) · 📋 CI gate in Phase 2 |
-| Exact dependency pins; Dependabot/Renovate for pins and digests | 🛠️ pins · 📋 bots |
-| GitHub Actions pinned to full commit SHAs; `permissions:` least privilege per job | 📋 Phase 2 |
+| Trivy image gate (HIGH/CRITICAL with fixes) | 🛠️ `ci.yml` `container` job. Locally **1 HIGH** (zlib1g, SE-4); the GitHub-runner build is the authoritative result |
+| Trivy filesystem scan (dependencies, misconfig, secrets) | 🛠️ `ci.yml` `trivy-fs` · ✅ locally 0 findings |
+| Exact dependency pins; Dependabot for pip, Docker digests, Actions SHAs and Terraform providers (with release cooldowns) | 🛠️ `.github/dependabot.yml` |
+| GitHub Actions pinned to full commit SHAs (verified against upstream tags); `permissions: {}` + per-job grants; no `pull_request_target`; no `${{ }}` in `run:` | 🛠️✅ `test_repo_hygiene.py` (mutation-tested: an unpinned action, `id-token: write` in CI, and an expression injection each fail) |
+| Workflow linters: actionlint, zizmor (Actions security), Checkov `github_actions` + a guard that fails if Checkov evaluated zero checks | 🛠️✅ |
+| Terraform provider lock files for 5 platforms, CI `init -lockfile=readonly` | 🛠️✅ |
 | SBOM (Syft/Trivy CycloneDX) attached to each image build | 📋 Phase 5 |
 | ECR tag immutability + scan on push | 📋 Phase 3 |
 
@@ -92,8 +96,9 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 - No secrets exist in the MVP. When needed: AWS Secrets Manager, injected through the ECS `secrets`
   field (resolved at task start by the execution role). Values never enter Terraform variables or state.
 - The Terraform plan artifact is still treated as sensitive: short retention, never printed in full.
-- Secret scanning: Trivy + Checkov secrets ✅ clean locally; GitHub secret scanning + push
-  protection (free for public repositories) 📋 enable and verify in Phase 2.
+- Secret scanning: Trivy + Checkov secrets ✅ clean locally and in CI; GitHub secret scanning + push
+  protection (free for public repositories): owner enables, `scripts/verify_github_settings.sh`
+  verifies ([github-settings.md](github-settings.md)).
 
 ## 7. Audit and evidence
 
@@ -111,4 +116,5 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | SE-3 | `# nosec B506` on `yaml.load` in `scripts/validate_service.py` | Loader is a `yaml.SafeLoader` subclass (adds a duplicate-key check). Bandit cannot see the subclass | `test_yaml_tags_cannot_execute_code` proves `!!python` tags are rejected | Permanent |
 | SE-4 | Local image has 1 HIGH OS CVE (zlib1g CVE-2026-85091, fix available) | This sandbox's network policy blocks Debian mirrors, so `apt-get upgrade` cannot run here. The Dockerfile now **fails** rather than skipping the upgrade | Image never published. Phase 2 CI on GitHub runners must show the CVE fixed before any push | Phase 2 (must close) |
 | SE-6 | Shared account with the AIOps project, whose apply role can write ECS/ELB/VPC resources account-wide in us-east-2 | Owner decision to reuse the account (ADR 0005) | AIOps pipeline is manual and approval-gated, and its environment is destroyed. `idp` resources are tagged and monitored for drift; recommend tag conditions in the AIOps repo | Phase 3 |
-| SE-5 | Single maintainer: environment approvals cannot be two-person | Solo portfolio project | Approval still forces a deliberate, logged human step; "prevent self-review" documented as a production requirement | Ongoing |
+| SE-5 | Single maintainer: environment approvals cannot be two-person, and the `main` ruleset requires 0 approvals and no code-owner review (an author cannot approve their own PR) | Solo portfolio project | PR + `ci-ok` required, no force push or deletion, no bypass actors; approval gates still force a deliberate, logged human step; raise to 1 approval + code-owner review when a second maintainer joins | Ongoing |
+| SE-7 | TFLint `terraform_unused_declarations` ignored file-by-file in skeleton `variables.tf` | Interface-only skeletons declare inputs that nothing uses yet | Other rules still apply (verified); `test_unused_declaration_ignore_only_while_skeleton` fails as soon as a configuration gains resources | Phase 3/4 (auto-enforced) |

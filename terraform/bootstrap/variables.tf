@@ -1,3 +1,6 @@
+# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
+# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
+
 # BOOTSTRAP (Phase 1 skeleton - implemented and applied ONLY after approval in Phase 3)
 #
 # One-time, account-level foundation applied by an administrator from a workstation, with local

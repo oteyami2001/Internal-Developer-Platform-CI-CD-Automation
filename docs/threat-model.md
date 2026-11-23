@@ -34,7 +34,7 @@ flowchart LR
 | T2 | TB1 | T | Manifest requests IAM, public SGs, other regions or arbitrary resources | 3×3 | Schema has no such fields; `additionalProperties: false` | ✅ |
 | T3 | TB1 | T | Manifest smuggles a value via duplicate YAML keys or YAML object tags | 2×3 | Duplicate-key loader; SafeLoader | ✅ |
 | T4 | TB1 | I | Secret committed in a manifest env var | 2×3 | Name + value heuristics in policy; Trivy/Checkov secret scan; GitHub push protection | ✅ heuristics + scans · 📋 push protection |
-| T5 | TB1 | T | Developer weakens guardrails by editing schema/policy in their PR | 2×3 | CODEOWNERS on `platform/`, `terraform/`, `.github/`; branch protection with code-owner review | 🛠️ CODEOWNERS · 📋 verify protection |
+| T5 | TB1 | T | Developer weakens guardrails by editing schema/policy in their PR | 2×3 | CODEOWNERS on `platform/`, `terraform/`, `.github/`; `main` ruleset (PR + `ci-ok`); code-owner review once there is a second maintainer (SE-5) | 🛠️ CODEOWNERS + ruleset file · 📋 owner applies, script verifies |
 | T6 | TB2 | E | Approval bypass: environment exists but is not actually protected | 2×3 | Verify with the API (`GET /repos/{o}/{r}/environments`) that required reviewers and branch policies are set; record evidence | 📋 Phase 2 |
 | T7 | TB2 | T | Reviewer approves plan A, apply runs plan B (or a re-plan) | 2×3 | Apply only consumes the artifact from the named plan run, verifies SHA-256 + commit SHA, never re-plans | 📋 Phase 3 |
 | T8 | TB2 | T | Stale approval: an old queued apply runs after newer changes | 2×2 | `timeout-minutes` on approval jobs; apply refuses if `main` moved; concurrency group per env | 📋 Phase 3 |
@@ -49,8 +49,9 @@ flowchart LR
 | T17 | TB5 | T | Header injection via `X-Request-ID` into logs | 2×1 | Strict pattern, otherwise replaced with a UUID; JSON-encoded logs | ✅ |
 | T18 | TB5 | D | Metric-cardinality DoS by scanning random paths | 2×1 | Unmatched routes collapse into one `unmatched` series | ✅ |
 | T19 | TB6 | I | Compromised task exfiltrates via unrestricted egress (public subnet) | 1×2 | Empty task role (nothing to steal from AWS); prod uses private subnets + endpoints | 🛠️ app needs no AWS · 📋 prod reference |
-| T20 | Supply chain | T | Compromised base image, dependency or GitHub Action | 2×3 | Digest-pinned base, exact pins, Trivy gate, SHA-pinned actions, Dependabot PRs scanned before merge | 🛠️ partial · 📋 Phase 2 |
-| T21 | Supply chain | T | Build "succeeds" while a security step silently did nothing | 2×2 | `pipefail` everywhere; `apt-get update --error-on=any` (real defect found in Phase 1) | ✅ (apt) · 📋 workflows |
+| T20 | Supply chain | T | Compromised base image, dependency or GitHub Action | 2×3 | Digest-pinned base, exact pins, Trivy gates, SHA-pinned actions verified against upstream tags, Dependabot with cooldowns, scanned before merge, read-only provider lock files | 🛠️✅ |
+| T21 | Supply chain | T | Build or scan "succeeds" while a security step silently did nothing | 2×2 | `pipefail` everywhere; `apt-get update --error-on=any`; `checkov-guard` fails if Checkov evaluated zero workflow checks (real defects found in Phases 1 and 2) | ✅ |
+| T24 | TB1 | E | A PR edits `ci.yml` to grant itself credentials, unpin an action or inject `${{ github.event.* }}` into a shell | 2×3 | `test_repo_hygiene.py` + zizmor + actionlint fail the PR; CI holds no secrets or OIDC anyway | ✅ |
 | T23 | TB4 | T | Shared account: the AIOps apply role (or a compromised AIOps pipeline) modifies `idp` ECS/ELB/VPC resources; or `idp` cleanup deletes shared resources | 1×2 | `idp` never manages `aiops-*` or the OIDC provider (data lookup); `idp` apply role tag-conditioned + explicit deny on `aiops-*`; AIOps workflows are manual + approval-gated; drift detection reports unexpected changes (ADR 0005, SE-6) | 🛠️ design · 📋 Phase 3/7 |
 | T22 | Repudiation | R | Cannot prove who approved or deployed what | 2×2 | GitHub environment approval logs, CloudTrail role sessions with OIDC subject, deployment report artifacts | 📋 Phase 5 |
 

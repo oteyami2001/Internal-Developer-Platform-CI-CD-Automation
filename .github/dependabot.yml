@@ -1,0 +1,38 @@
+# Dependency updates arrive as PRs and must pass the full CI gate (scans included) before merge.
+# A cooldown waits a few days after an upstream release, so a hijacked release has time to be
+# detected and yanked before it is proposed here.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directories: ["/", "/apps/sample-api"]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+    groups:
+      python:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /apps/sample-api
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+
+  - package-ecosystem: terraform
+    directories: ["/terraform/stack", "/terraform/bootstrap"]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
