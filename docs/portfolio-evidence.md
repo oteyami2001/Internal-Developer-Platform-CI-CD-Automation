@@ -19,7 +19,10 @@ Approved by the owner 2026-11-23 ([release-runbook.md](release-runbook.md)).
 | P5-A6 | Drift check, run 45135379914, 08:02 | **Drift found:** `1 to add, 1 to destroy`. The task definition would be replaced because of the defaults ECS stores (defect below) | ❌ → fixed (PR #9) |
 | P5-A6b | Drift check after the fix, run 45139612183, 08:34 | `No changes. Your infrastructure matches the configuration.` | ✅ |
 | P5-A7 | `app-deploy` run 45139839358 (scenario 6), owner approved `dev-deploy` | `Registered idp-dev-sample-api:2`, rollout `IN_PROGRESS` → `COMPLETED` 08:36:44–08:39:07, `Deployed idp-dev-sample-api:2: 1 healthy target(s), 150s.` Role ARN masked | ✅ |
-| P5-A8 | Unapproved/rejected deploy (scenario 7) | Not run yet | ⏳ |
+| P5-A7b | `image-build` run 45141823483 (merge of PR #10, 08:50) | Single image manifest accepted by the new push check: `git-829fbb3…` = `sha256:5e3b3b4b…609413d` | ✅ |
+| P5-A7c | `app-deploy` run 45142009342 (real release of the new image), owner approved | `idp-dev-sample-api:3`, rollout `COMPLETED` 08:52:53–08:55:14, `1 healthy target(s), 146s` | ✅ |
+| P5-A7d | `app-deploy` run 45143557865, approved by mistake instead of rejected | Re-deployed the same digest as revision 4 (09:03–09:06); no functional change, no downtime. Recorded for honesty | ✅ (unintended) |
+| P5-A8 | Rejected deploy, run 45145248304 (scenario 7), owner clicked **Reject** on `dev-deploy` at ~09:15 | Run conclusion `failure`; the job has **no runner and no steps**, so it never requested OIDC credentials and AWS was not touched | ✅ |
 
 **Defect found in AWS: the image is an index with untagged children.** The owner's ECR screenshot
 showed 3 entries for one push: the tagged `Image Index` (`sha256:09dbd1aa…`, the digest we deploy)
@@ -349,9 +352,9 @@ explicit SCP deny. us-east-2: no ECS, ALB, NAT, EIP or secrets left; month-to-da
 | 2 | PR triggers tests and security scans | ✅ PR #1, runs 45096890726 (caught a real failure) and 45097129693 (green) |
 | 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9, P2-9); 📋 on a GitHub PR |
 | 4 | Container image built and scanned | ✅ in CI on GitHub (run 45097129693, Trivy gate passed) |
-| 5 | Approved image published to ECR | 🛠️✅ Phase 5 code · ⏳ first run |
-| 6 | Authorized deployment updates ECS Fargate | 🛠️✅ Phase 5 code · ⏳ first run |
-| 7 | Unapproved deployment is blocked | 🛠️ `dev-deploy` reviewer + OIDC trust · ⏳ evidence |
+| 5 | Approved image published to ECR | ☁️ P5-A1, P5-A7b |
+| 6 | Authorized deployment updates ECS Fargate | ☁️ P5-A3 (first release), P5-A7, P5-A7c |
+| 7 | Unapproved deployment is blocked | ☁️ P5-A8 (rejected: job never started, no credentials) |
 | 8 | Application passes health checks | ✅ locally (E13); 📋 behind ALB |
 | 9 | Failing release is rolled back | 📋 Phase 7 |
 | 10 | Configuration drift detected | 📋 Phase 7 |
