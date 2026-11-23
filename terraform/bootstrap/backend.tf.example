@@ -1,0 +1,12 @@
+# Step 2 of docs/bootstrap-runbook.md - AFTER the first apply has created the state bucket:
+#   cp backend.tf.example backend.tf
+#   terraform init -migrate-state -backend-config="bucket=<state_bucket output>"
+# backend.tf is git-ignored: the bucket name contains the account ID.
+terraform {
+  backend "s3" {
+    key          = "bootstrap/terraform.tfstate"
+    region       = "us-east-2"
+    encrypt      = true
+    use_lockfile = true
+  }
+}

@@ -8,7 +8,7 @@ networking or arbitrary AWS resources.
 **Stack:** AWS (ECS Fargate, ECR, ALB, VPC, IAM, CloudWatch, SNS, Budgets) · Terraform · GitHub
 Actions + OIDC · Python/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
 
-> **Project status: Phase 2 (CI and security automation) complete: merged, GitHub settings verified. Nothing is deployed to AWS.**
+> **Project status: Phase 3 (bootstrap) implemented and tested offline, in review. Nothing is deployed to AWS yet.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
 > Target: the AIOps project's AWS account in us-east-2, shared with that project's retained
@@ -23,7 +23,8 @@ Actions + OIDC · Python/FastAPI · Docker · pytest · Ruff · Bandit · Checko
 | Service manifest: JSON Schema + platform policy + validator (rejects IAM/region/SG fields, secrets in env vars, oversize tasks, duplicate YAML keys…) | 🛠️✅ 51 tests |
 | Generated service catalog with staleness check | 🛠️✅ |
 | Terraform: single environment stack + dev/staging/prod data, account and region guards (us-east-2 only), ingress/HTTPS/retention/budget validation | 🛠️✅ 15 `terraform test` runs (mocked AWS) |
-| Terraform module interfaces (9 modules), ecs-service digest-only images | 🛠️✅ 7 contract tests · 📋 resources |
+| Bootstrap (Phase 3): state bucket, CloudTrail, 4 OIDC roles, permissions boundary, ECR, budget; modules `iam-oidc`, `security`, `ecr`, `budgets` implemented | 🛠️✅ 23 `terraform test` runs + 10/10 mutations caught · ⏳ owner applies via [bootstrap-runbook.md](docs/bootstrap-runbook.md) |
+| Remaining module interfaces (network, load-balancer, ecs-cluster, ecs-service, observability) | 🛠️✅ 7 ecs-service contract tests · 📋 resources in Phase 4 |
 | `ci.yml`: pytest, Ruff, Bandit, manifests, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov (IaC, Dockerfile, Actions, secrets), Trivy (repo + image), actionlint, zizmor, shellcheck; one `ci-ok` gate | ✅ green on GitHub ([PR #1](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/pull/1)) |
 | Workflow security rules as tests (SHA pins, least privilege, no OIDC in CI, no `pull_request_target`, no expression injection) | 🛠️✅ 23 tests |
 | Deployment workflows, OIDC roles, ECR, ECS deployment, monitoring, rollback, drift, cleanup | 📋 Phases 3–7 |
@@ -94,6 +95,7 @@ validation, catalog check, `terraform fmt/validate/test`, environment-data tests
 | [portfolio-evidence.md](docs/portfolio-evidence.md) | Timestamped test results and defects found |
 | [phase-0-assessment.md](docs/phase-0-assessment.md) | Repository, reference-project and tooling assessment |
 | [aws-discovery-2026-11-23.md](docs/aws-discovery-2026-11-23.md) | Live AWS account discovery (redacted) and its Phase 3 impact |
+| [bootstrap-runbook.md](docs/bootstrap-runbook.md) | Step-by-step bootstrap from AWS CloudShell, verification, GitHub environments |
 | [github-settings.md](docs/github-settings.md) | Branch ruleset, secret scanning, Actions defaults: apply + verify |
 | [docs/adr/](docs/adr) | Architecture decision records |
 

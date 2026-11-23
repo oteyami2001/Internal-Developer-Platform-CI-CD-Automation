@@ -99,7 +99,14 @@ for e in $envs; do
   else
     [ "$reviewers" -ge 1 ] && pass "environment $e requires a reviewer" || fail "environment $e has NO required reviewer"
   fi
-  [ "$branch_policy" != "none" ] && pass "environment $e restricts deployment branches ($branch_policy)" || fail "environment $e allows any branch"
+  if [ "$branch_policy" = "custom" ]; then
+    allowed=$(api "repos/$REPO/environments/$e/deployment-branch-policies" | jq -r '[.branch_policies[]?.name] | sort | join(",")')
+    check "environment $e deploys only from main" "$allowed" main
+  elif [ "$branch_policy" = "none" ]; then
+    fail "environment $e allows any branch"
+  else
+    pass "environment $e restricts deployment branches ($branch_policy)"
+  fi
 done
 
 echo

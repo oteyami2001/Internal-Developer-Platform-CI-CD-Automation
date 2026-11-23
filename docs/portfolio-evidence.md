@@ -3,6 +3,31 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Phase 3 — Terraform bootstrap (2026-11-23)
+
+Approved by the owner on 2026-11-23 with a $25 project budget and the CloudTrail trail. Code and
+offline tests are done; **the AWS apply is performed by the owner** from CloudShell
+([bootstrap-runbook.md](bootstrap-runbook.md)). Nothing below is AWS-verified yet.
+
+### Offline validation
+
+| # | Check | Result | Time (UTC) |
+|---|---|---|---|
+| P3-1 | `make check` (whole repository) | ✅ exit 0 | 03:13:37–03:14:32 |
+| P3-2 | New `terraform test` suites: iam-oidc 8, bootstrap 7, ecr 5, budgets 2, security 1 | ✅ 23/23 passed | 03:14 |
+| P3-3 | Mutation testing of the Terraform assertions (10 deliberate weakenings, e.g. `StringLike` trust, plan role gains `s3:PutObject`, apply role trusts `pull_request`, aiops deny weakened, boundary condition removed, mutable ECR tags, trail validation off, public state bucket, OIDC provider no longer looked up) | ✅ **10/10 caught**, files restored | ~03:02 |
+| P3-4 | Checkov (Terraform) | ✅ 49 passed, 0 failed, 21 skipped (each with inline justification) | 03:14 |
+| P3-5 | TFLint + AWS ruleset | ✅ 0 issues, after fixing 2 findings: unused guard data sources (now outputs) and a null template in standalone module evaluation | ~03:05 |
+| P3-6 | Trivy fs (misconfig, secrets, vulnerabilities; all severities) | ✅ 0 findings (3 LOW and the HIGH SSE/CloudTrail items carry justified inline ignores) | ~03:08 |
+| P3-7 | `scripts/verify_bootstrap.sh` against stubbed AWS responses | ✅ a correct bootstrap passes 20/20; a broken one fails exactly the 4 broken controls (versioning suspended, wildcard trust, missing role ×2) | 03:11 |
+| P3-8 | shellcheck (new scripts) | ✅ clean | ~03:10 |
+
+### AWS apply
+
+⏳ Pending: owner runs [bootstrap-runbook.md](bootstrap-runbook.md) after this PR merges. Record
+here: the plan line (expected `28 to add, 0 to change, 0 to destroy`), the apply summary, the
+`verify_bootstrap.sh` output, and the `verify_github_settings.sh` output with environments.
+
 ## Phase 2 — CI and security automation (2026-11-23)
 
 ### Local validation (before the first GitHub run)

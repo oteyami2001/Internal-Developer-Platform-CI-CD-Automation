@@ -13,13 +13,13 @@ Status legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁�
 
 ## 2. Identity and access
 
-### 2.1 GitHub OIDC roles 📋 (Phase 3; interface 🛠️ in `terraform/modules/iam-oidc`)
+### 2.1 GitHub OIDC roles 🛠️✅ (`terraform/modules/iam-oidc`, 8 offline tests; ☁️ after the bootstrap apply)
 
 | Role | Trusted `sub` (exact `StringEquals`) | Allowed | Explicitly not allowed |
 |---|---|---|---|
 | `idp-<env>-github-plan` | `repo:oteyami2001/Internal-Developer-Platform-CI-CD-Automation:environment:<env>-plan` | Describe/List/Get of project services; read state + write lock file | Data reads (S3 objects outside state, Secrets values, logs content), any write |
 | `idp-<env>-github-apply` | `…:environment:<env>` | Writes to project services, **conditioned on `aws:RequestedRegion`**; IAM only on `idp-<env>-*` roles **with the permissions boundary** | Creating users or access keys, removing boundaries, Organizations/account, CloudTrail tampering, editing CI roles |
-| `idp-github-image-push` | `…:ref:refs/heads/main` | `ecr:GetAuthorizationToken`; push to project repositories | Delete images, change repository policy or mutability |
+| `idp-github-image-push` | `…:ref:refs/heads/main` | `ecr:GetAuthorizationToken`; push to `idp/*` repositories (and the repositories' own policy denies pushes from **any other principal**, administrators included) | Delete images, change repository policy or mutability |
 | `idp-<env>-github-deploy` | `…:environment:<env>-deploy` | `ecs:RegisterTaskDefinition`, `ecs:UpdateService`/`Describe*` on one cluster; `iam:PassRole` for that env's task/execution roles only | Terraform state, any other service |
 
 All trust policies also require `aud = sts.amazonaws.com`. **No role trusts `pull_request`**
@@ -35,12 +35,12 @@ other's roles. The `idp` apply role will add `aws:ResourceTag/Project = idp` con
 support them, and explicitly deny writes to `aiops-*` IAM, S3 and ECR resources. The AIOps apply
 role is broader (`ecs:*`, `elasticloadbalancing:*` on `*` in us-east-2), which is exception SE-6.
 
-### 2.2 Permissions boundary 📋
+### 2.2 Permissions boundary 🛠️✅ (`terraform/modules/security`)
 Every role created by the apply role must carry the workload boundary (an `iam:PermissionsBoundary`
 condition on `CreateRole`/`Put*Policy`), as in the previous project, whose boundary design is reused
 after review. The boundary denies IAM writes, Organizations/account/billing and CloudTrail changes.
 
-### 2.3 Workload roles 📋
+### 2.3 Workload roles 📋 (Phase 4, `ecs-service`)
 - **Execution role** (per service): pull from its ECR repository, write its log group, read only
   `idp/<env>/<service>/*` secrets.
 - **Task role** (per service): empty by default. The sample app calls no AWS APIs.
@@ -102,10 +102,12 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 
 ## 7. Audit and evidence
 
-- CloudTrail: discovery found **no trail** in the account, only Event history (90 days of
-  management events, free). Every role session and its OIDC `sub` (`AssumeRoleWithWebIdentity`)
-  is still recorded there for 90 days. Recommended for Phase 3: a single-Region management-events
-  trail in the bootstrap, for evidence older than 90 days (owner decision 6).
+- CloudTrail: discovery found **no trail** in the account (only the 90-day Event history). Owner
+  decision 2026-11-23: the bootstrap adds `idp-management-events` 🛠️✅, a single-Region trail of
+  management events (read + write, including IAM/STS global events, so every
+  `AssumeRoleWithWebIdentity` with its OIDC `sub`). It has log file validation (tamper-evident
+  digests) and goes to a versioned, TLS-only bucket whose policy denies log deletion and allows
+  CloudTrail writes only for this trail (`aws:SourceArn`). Retention is 365 days.
 - GitHub records environment approvals (who, when) and deployment history.
 - `docs/portfolio-evidence.md` records timestamped, real results only.
 

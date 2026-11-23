@@ -1,12 +1,8 @@
-# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
-# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
-
-# MODULE CONTRACT (Phase 1 skeleton - resources are implemented in Phase 3, bootstrap)
-#
-# Planned resources per repository:
-#   aws_ecr_repository (image_tag_mutability = IMMUTABLE - hard-coded, scan_on_push = true)
-#   aws_ecr_lifecycle_policy (keep the newest max_images; expire untagged after 1 day)
-#   aws_ecr_repository_policy (pull: ECS execution roles of this account; push: image-push role only)
+# Container registries for catalog services.
+#   - Tag immutability and scan-on-push are hard-coded (not inputs).
+#   - Lifecycle: untagged images expire after 1 day; the newest max_images are kept for rollback.
+#   - Repository policy: ONLY the image-push role may push (even administrators cannot), so every
+#     image in the registry went through the CI build, smoke test and Trivy gate.
 
 variable "repositories" {
   description = "Repository name -> settings. One repository per catalog service."
@@ -24,8 +20,9 @@ variable "repositories" {
 }
 
 variable "encryption_type" {
-  type    = string
-  default = "AES256"
+  description = "KMS (AWS managed aws/ecr key, no extra cost) or AES256."
+  type        = string
+  default     = "KMS"
   validation {
     condition     = contains(["AES256", "KMS"], var.encryption_type)
     error_message = "encryption_type must be AES256 or KMS."
@@ -33,10 +30,10 @@ variable "encryption_type" {
 }
 
 variable "push_role_arn" {
-  type = string
-}
-
-variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "The only principal allowed to push images."
+  type        = string
+  validation {
+    condition     = can(regex("^arn:aws:iam::[0-9]{12}:role/", var.push_role_arn))
+    error_message = "push_role_arn must be an IAM role ARN."
+  }
 }

@@ -50,6 +50,11 @@ are consistent with these estimates.
 - **Project budget: $25/month** on the `Project=idp` tag (bootstrap `project_monthly_budget_usd`;
   requires activating `Project` as a cost-allocation tag, which can take up to 24 h).
 - Inherited baseline: the AIOps bootstrap costs about $0.01/month and stays.
+- **CloudTrail trail** (owner decision): the first copy of management events is free. Log files
+  are a few MB/month (cents of S3 storage). Retention is 365 days, then expiry.
+- **The `Project` tag must be activated as a cost allocation tag in the management account**
+  (Billing → Cost allocation tags). Until then the project budget reads $0, and the account-wide
+  budget is the only working alert. See [bootstrap-runbook.md §10](bootstrap-runbook.md).
 - A continuously running MVP (~$38–$45) **would exceed** both the $25 project budget and the $30 account budget. The operating model is
   **deploy for a demo, then run approved cleanup**.
 - **Budgets do not stop spending.** They notify. The cost control is `cleanup.yml` (Phase 7) plus

@@ -18,6 +18,8 @@ terraform.rc
 *.auto.tfvars
 *.auto.tfvars.json
 backend.hcl
+# Bootstrap backend after state migration (bucket name contains the account ID)
+terraform/bootstrap/backend.tf
 secrets.tfvars
 # Root configurations commit their provider lock file; reusable modules do not.
 terraform/modules/**/.terraform.lock.hcl
