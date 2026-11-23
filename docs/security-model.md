@@ -23,7 +23,17 @@ Status legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁�
 | `idp-<env>-github-deploy` | `…:environment:<env>-deploy` | `ecs:RegisterTaskDefinition`, `ecs:UpdateService`/`Describe*` on one cluster; `iam:PassRole` for that env's task/execution roles only | Terraform state, any other service |
 
 All trust policies also require `aud = sts.amazonaws.com`. **No role trusts `pull_request`**
-([ADR 0003](adr/0003-no-oidc-trust-for-pull-requests.md)).
+([ADR 0003](adr/0003-no-oidc-trust-for-pull-requests.md)). Subjects shown in the short form; if the
+repository uses immutable-ID subjects (as the AIOps repository does) they become
+`repo:oteyami2001@<owner_id>/Internal-Developer-Platform-CI-CD-Automation@<repo_id>:…`, verified in Phase 3.
+
+### 2.1a Shared account ([ADR 0005](adr/0005-shared-account-with-aiops-project.md))
+
+The account also hosts the AIOps project's retained bootstrap. The GitHub OIDC provider is shared
+and only looked up. Role trust is per repository, so neither project's workflows can assume the
+other's roles. The `idp` apply role will add `aws:ResourceTag/Project = idp` conditions where APIs
+support them, and explicitly deny writes to `aiops-*` IAM, S3 and ECR resources. The AIOps apply
+role is broader (`ecs:*`, `elasticloadbalancing:*` on `*` in us-east-2), which is exception SE-6.
 
 ### 2.2 Permissions boundary 📋
 Every role created by the apply role must carry the workload boundary (an `iam:PermissionsBoundary`
@@ -100,4 +110,5 @@ Guardrail files (`platform/schemas/`, `platform/policy/`) are owned by the platf
 | SE-2 | Dev ALB over HTTP | No domain or certificate for the demo | Terraform rejects anything but `/32` ingress without HTTPS (✅ tested); no credentials over the endpoint | Phase 4 |
 | SE-3 | `# nosec B506` on `yaml.load` in `scripts/validate_service.py` | Loader is a `yaml.SafeLoader` subclass (adds a duplicate-key check). Bandit cannot see the subclass | `test_yaml_tags_cannot_execute_code` proves `!!python` tags are rejected | Permanent |
 | SE-4 | Local image has 1 HIGH OS CVE (zlib1g CVE-2026-85091, fix available) | This sandbox's network policy blocks Debian mirrors, so `apt-get upgrade` cannot run here. The Dockerfile now **fails** rather than skipping the upgrade | Image never published. Phase 2 CI on GitHub runners must show the CVE fixed before any push | Phase 2 (must close) |
+| SE-6 | Shared account with the AIOps project, whose apply role can write ECS/ELB/VPC resources account-wide in us-east-2 | Owner decision to reuse the account (ADR 0005) | AIOps pipeline is manual and approval-gated, and its environment is destroyed. `idp` resources are tagged and monitored for drift; recommend tag conditions in the AIOps repo | Phase 3 |
 | SE-5 | Single maintainer: environment approvals cannot be two-person | Solo portfolio project | Approval still forces a deliberate, logged human step; "prevent self-review" documented as a production requirement | Ongoing |

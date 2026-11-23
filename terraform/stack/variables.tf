@@ -34,11 +34,11 @@ variable "aws_account_id" {
 }
 
 variable "region" {
-  description = "AWS Region. Restricted to regions approved for this project (pending owner confirmation, see docs/deployment-plan.md)."
+  description = "AWS Region. us-east-2 only: the shared account's Organization SCP denies regional services in us-east-1 (ADR 0005)."
   type        = string
   validation {
-    condition     = contains(["us-east-2", "us-east-1", "us-west-2"], var.region)
-    error_message = "region is not on the approved list (us-east-2, us-east-1, us-west-2)."
+    condition     = contains(["us-east-2"], var.region)
+    error_message = "region must be us-east-2 (the only Region approved for the shared account; us-east-1 is denied by SCP)."
   }
 }
 

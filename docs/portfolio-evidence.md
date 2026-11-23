@@ -18,7 +18,7 @@ Trivy (container image `aquasec/trivy:latest`). **No AWS credentials; no AWS res
 | E5 | Manifest validation | `scripts/validate_service.py apps/*/service.yaml` | ✅ `OK apps/sample-api/service.yaml` | 01:07 |
 | E6 | Catalog freshness | `scripts/generate_catalog.py --check` | ✅ up to date | 01:07 |
 | E7 | Terraform fmt + validate (11 dirs) | `make tf-validate` | ✅ 11/11 valid | 01:07 |
-| E8 | Terraform guardrail tests (stack) | `terraform test` | ✅ 14 passed, 0 failed | 01:07 |
+| E8 | Terraform guardrail tests (stack) | `terraform test` | ✅ 14 passed, 0 failed (15 after ADR 0005 added the us-east-1 rejection test) | 01:07 |
 | E9 | Terraform contract tests (ecs-service) | `terraform test` | ✅ 7 passed, 0 failed | 01:07 |
 | E10 | Checkov IaC + Dockerfile + secrets | `make security` | ✅ Dockerfile 85/0, Terraform 1/0, secrets clean | 01:07 |
 | E11 | Trivy misconfig + secret scan of repo | `trivy fs --scanners misconfig,secret` | ✅ 0 findings | ~01:00 |

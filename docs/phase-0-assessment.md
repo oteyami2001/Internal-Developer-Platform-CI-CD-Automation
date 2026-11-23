@@ -32,11 +32,16 @@ Read (shallow clone) for engineering practices. Nothing was copied wholesale.
 | `defaults.run.shell: bash` (pipefail) after a green-but-failed plan | ✅ adopted | Hit again in this phase with a background build |
 | SHA-pinned actions, Checkov hard-fail with inline justified skips | ✅ adopted (Phase 2) | |
 | Mutable `image_tag` deploy input | ❌ changed | Digests only, validated in Terraform |
-| Region decision record (SCP blocked us-east-1) | ✅ informs our proposal | Not assumed: the target account and Region still need confirmation |
+| Region decision record (SCP blocked us-east-1) | ✅ adopted | Same account and Region confirmed by the owner (ADR 0005) |
 
 ## 3. AWS environment assessment
 
-**Blocked.** The build environment's AWS credentials are a placeholder (`InvalidClientTokenId`
+**Owner decision (2026-11-23):** reuse the AIOps account and keep all of its resources
+([ADR 0005](adr/0005-shared-account-with-aiops-project.md)). From the AIOps repository's own
+evidence, the account holds that project's retained bootstrap and the shared OIDC provider, and its
+dev environment was destroyed on 2026-11-22.
+
+**Live verification is still blocked.** The build environment's AWS credentials are a placeholder (`InvalidClientTokenId`
 from STS), so no read-only discovery ran. Run `scripts/aws_discovery.sh` and see
 [deployment-plan.md §1](deployment-plan.md#1-phase-0--aws-environment-assessment-2026-11-23).
 

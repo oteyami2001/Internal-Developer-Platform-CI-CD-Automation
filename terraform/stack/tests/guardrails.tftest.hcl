@@ -66,6 +66,12 @@ run "rejects_unapproved_region" {
   expect_failures = [var.region]
 }
 
+run "rejects_scp_blocked_us_east_1" {
+  command = plan
+  variables { region = "us-east-1" }
+  expect_failures = [var.region]
+}
+
 run "rejects_malformed_account_id" {
   command = plan
   variables { aws_account_id = "1234" }

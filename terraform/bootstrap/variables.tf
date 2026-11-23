@@ -3,11 +3,16 @@
 # One-time, account-level foundation applied by an administrator from a workstation, with local
 # state first and then migrated into the bucket it creates:
 #   - S3 state bucket: versioning, SSE, public access block, TLS-only + deny-delete bucket policy
-#   - GitHub OIDC provider and the plan / apply / image-push / deploy roles (module iam-oidc)
+#   - plan / apply / image-push / deploy roles (module iam-oidc)
 #   - Workload permissions boundary (module security)
 #   - ECR repositories for catalog services (module ecr)
-#   - Account-level AWS Budget (module budgets)
+#   - Project-scoped AWS Budget (module budgets, filtered on Project=idp)
 # Everything else is created by terraform/stack through the approval-gated pipeline.
+#
+# SHARED ACCOUNT (ADR 0005): the account also holds the AIOps project's retained bootstrap
+# (aiops-* state bucket, roles, boundary, ECR repository, account-wide budget) and the account's
+# single GitHub OIDC provider. This configuration only READS the OIDC provider (data source) and
+# never manages, imports or modifies any aiops-* resource.
 
 variable "project" {
   type    = string
@@ -23,10 +28,11 @@ variable "aws_account_id" {
 }
 
 variable "region" {
-  type = string
+  type    = string
+  default = "us-east-2"
   validation {
-    condition     = contains(["us-east-2", "us-east-1", "us-west-2"], var.region)
-    error_message = "region is not on the approved list."
+    condition     = contains(["us-east-2"], var.region)
+    error_message = "region must be us-east-2 (us-east-1 is denied by the Organization SCP)."
   }
 }
 
@@ -41,20 +47,53 @@ variable "github_repository" {
 }
 
 variable "create_oidc_provider" {
-  description = "Set false if `aws iam list-open-id-connect-providers` already shows token.actions.githubusercontent.com."
+  description = "false: the shared account already has the GitHub OIDC provider (created by the AIOps project). It is looked up, never managed here, so destroying this project can never break the other one."
+  type        = bool
+  default     = false
+}
+
+variable "github_oidc_immutable_subject" {
+  description = "true if the repository's OIDC subject uses immutable IDs (repo:owner@<id>/repo@<id>), as the AIOps repository does. Verify with the GitHub API before Phase 3."
   type        = bool
   default     = true
+}
+
+variable "github_owner_id" {
+  description = "Numeric GitHub owner ID used in immutable OIDC subjects. Not a secret."
+  type        = string
+  default     = "157901928"
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_owner_id))
+    error_message = "github_owner_id must be numeric."
+  }
+}
+
+variable "github_repository_id" {
+  description = "Numeric GitHub repository ID used in immutable OIDC subjects (set in Phase 3 from the GitHub API)."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.github_repository_id == null || can(regex("^[0-9]+$", var.github_repository_id))
+    error_message = "github_repository_id must be numeric."
+  }
+  validation {
+    condition     = !var.github_oidc_immutable_subject || var.github_repository_id != null
+    error_message = "github_repository_id is required when github_oidc_immutable_subject is true."
+  }
 }
 
 variable "alert_email" {
   type = string
 }
 
-variable "account_monthly_budget_usd" {
-  type    = number
-  default = 30
+# The account-wide $30 budget already exists (aiops-account-monthly) and covers this project's
+# spend too, so no second account-wide budget is created (it would only duplicate alerts).
+variable "project_monthly_budget_usd" {
+  description = "Budget for resources tagged Project=idp. Requires the Project tag to be activated as a cost-allocation tag (up to 24 h)."
+  type        = number
+  default     = 25
   validation {
-    condition     = var.account_monthly_budget_usd >= 1 && var.account_monthly_budget_usd <= 200
-    error_message = "account_monthly_budget_usd must be 1-200."
+    condition     = var.project_monthly_budget_usd >= 1 && var.project_monthly_budget_usd <= 200
+    error_message = "project_monthly_budget_usd must be 1-200."
   }
 }

@@ -44,10 +44,13 @@ are consistent with these estimates.
 
 ## 3. Budget recommendation
 
-- **Account budget: $30/month** (bootstrap `account_monthly_budget_usd`), alerts at 50/80/100% actual and 100% forecast.
-- **dev environment budget: $25/month** on `Project=idp` + `Environment=dev` tags (requires
-  activating the tags as cost-allocation tags; it can take up to 24 h before they appear).
-- A continuously running MVP (~$38–$45) **would exceed** the $30 budget. The operating model is
+- **Account budget: the existing `aiops-account-monthly` ($30/month, account-wide)** from the AIOps
+  project is kept ([ADR 0005](adr/0005-shared-account-with-aiops-project.md)). It already counts
+  this project's spend, so no second account-wide budget is created.
+- **Project budget: $25/month** on the `Project=idp` tag (bootstrap `project_monthly_budget_usd`;
+  requires activating `Project` as a cost-allocation tag, which can take up to 24 h).
+- Inherited baseline: the AIOps bootstrap costs about $0.01/month and stays.
+- A continuously running MVP (~$38–$45) **would exceed** both the $25 project budget and the $30 account budget. The operating model is
   **deploy for a demo, then run approved cleanup**.
 - **Budgets do not stop spending.** They notify. The cost control is `cleanup.yml` (Phase 7) plus
   the discipline of tearing down after each demo. Budget data also lags by up to ~8–24 hours.

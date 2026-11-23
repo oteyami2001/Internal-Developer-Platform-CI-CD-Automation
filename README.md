@@ -11,6 +11,8 @@ Actions + OIDC · Python/FastAPI · Docker · pytest · Ruff · Bandit · Checko
 > **Project status: Phase 1 complete (offline). Nothing is deployed to AWS.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
+> Target: the AIOps project's AWS account in us-east-2, shared with that project's retained
+> resources ([ADR 0005](docs/adr/0005-shared-account-with-aiops-project.md)).
 
 ## What works today
 
@@ -20,7 +22,7 @@ Actions + OIDC · Python/FastAPI · Docker · pytest · Ruff · Bandit · Checko
 | Multi-stage, digest-pinned, non-root (UID 10001), read-only-FS-compatible image | 🛠️✅ Checkov 85/85 |
 | Service manifest: JSON Schema + platform policy + validator (rejects IAM/region/SG fields, secrets in env vars, oversize tasks, duplicate YAML keys…) | 🛠️✅ 51 tests |
 | Generated service catalog with staleness check | 🛠️✅ |
-| Terraform: single environment stack + dev/staging/prod data, account and region guards, ingress/HTTPS/retention/budget validation | 🛠️✅ 14 `terraform test` runs (mocked AWS) |
+| Terraform: single environment stack + dev/staging/prod data, account and region guards (us-east-2 only), ingress/HTTPS/retention/budget validation | 🛠️✅ 15 `terraform test` runs (mocked AWS) |
 | Terraform module interfaces (9 modules), ecs-service digest-only images | 🛠️✅ 7 contract tests · 📋 resources |
 | CI/CD workflows, OIDC roles, ECR, ECS deployment, monitoring, rollback, drift, cleanup | 📋 Phases 2–7 |
 

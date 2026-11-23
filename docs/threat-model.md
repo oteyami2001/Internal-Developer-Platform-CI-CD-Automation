@@ -51,11 +51,13 @@ flowchart LR
 | T19 | TB6 | I | Compromised task exfiltrates via unrestricted egress (public subnet) | 1×2 | Empty task role (nothing to steal from AWS); prod uses private subnets + endpoints | 🛠️ app needs no AWS · 📋 prod reference |
 | T20 | Supply chain | T | Compromised base image, dependency or GitHub Action | 2×3 | Digest-pinned base, exact pins, Trivy gate, SHA-pinned actions, Dependabot PRs scanned before merge | 🛠️ partial · 📋 Phase 2 |
 | T21 | Supply chain | T | Build "succeeds" while a security step silently did nothing | 2×2 | `pipefail` everywhere; `apt-get update --error-on=any` (real defect found in Phase 1) | ✅ (apt) · 📋 workflows |
+| T23 | TB4 | T | Shared account: the AIOps apply role (or a compromised AIOps pipeline) modifies `idp` ECS/ELB/VPC resources; or `idp` cleanup deletes shared resources | 1×2 | `idp` never manages `aiops-*` or the OIDC provider (data lookup); `idp` apply role tag-conditioned + explicit deny on `aiops-*`; AIOps workflows are manual + approval-gated; drift detection reports unexpected changes (ADR 0005, SE-6) | 🛠️ design · 📋 Phase 3/7 |
 | T22 | Repudiation | R | Cannot prove who approved or deployed what | 2×2 | GitHub environment approval logs, CloudTrail role sessions with OIDC subject, deployment report artifacts | 📋 Phase 5 |
 
 ## 4. Residual risks accepted for the MVP
 
 - SE-1/SE-2 in [security-model.md](security-model.md#8-documented-security-exceptions) (public subnet, HTTP demo).
 - Single maintainer: approvals are deliberate but not two-person (SE-5).
+- Shared account with the AIOps project (T23, SE-6).
 - Same-account environments: a bug in the apply role's scoping could affect another environment's
   resources. Name-prefix scoping and per-environment roles reduce the risk; separate accounts remove it (production reference).

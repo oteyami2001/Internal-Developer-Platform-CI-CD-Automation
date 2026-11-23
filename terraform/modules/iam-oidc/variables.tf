@@ -35,9 +35,29 @@ variable "github_repository" {
 }
 
 variable "create_oidc_provider" {
-  description = "false if the account already has the GitHub OIDC provider (one per account)."
+  description = "false if the account already has the GitHub OIDC provider (one per account). In the shared account it is owned by the AIOps project and only looked up here."
+  type        = bool
+  default     = false
+}
+
+variable "github_oidc_immutable_subject" {
+  description = "Build subjects as repo:<owner>@<owner_id>/<repo>@<repo_id>:... (immutable IDs) instead of repo:<owner>/<repo>:..."
   type        = bool
   default     = true
+}
+
+variable "github_owner_id" {
+  type    = string
+  default = null
+}
+
+variable "github_repository_id" {
+  type    = string
+  default = null
+  validation {
+    condition     = !var.github_oidc_immutable_subject || (var.github_owner_id != null && var.github_repository_id != null)
+    error_message = "github_owner_id and github_repository_id are required for immutable OIDC subjects."
+  }
 }
 
 variable "environments" {

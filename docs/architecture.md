@@ -66,6 +66,9 @@ flowchart LR
 | `staging` | Release validation, rollback rehearsal | Manual approval | 🛠️✅ Terraform data validated only |
 | `prod` | Production-style reference | Protected approval; HTTPS mandatory | 🛠️✅ Terraform data validated only |
 
+**Account:** the AIOps project's AWS account, us-east-2, shared with that project's retained
+bootstrap resources ([ADR 0005](adr/0005-shared-account-with-aiops-project.md)).
+
 **Isolation in one AWS account (MVP):** separate Terraform state key and lock file per environment,
 `<project>-<env>-` resource name prefixes, per-environment IAM roles whose OIDC trust names a
 per-environment GitHub environment, environment tags, and separate security groups. Moving to an
@@ -123,7 +126,7 @@ Root configurations:
 
 | Root | Applied by | State | Contents |
 |---|---|---|---|
-| `terraform/bootstrap` | Administrator, once, from a workstation (Phase 3, after approval) | Local first, then migrated to the bucket it creates | State bucket, OIDC + CI roles, boundary, ECR, account budget |
+| `terraform/bootstrap` | Administrator, once, from a workstation (Phase 3, after approval) | Local first, then migrated to the bucket it creates | State bucket, CI roles (shared OIDC provider looked up), boundary, ECR, project budget |
 | `terraform/stack` | `terraform-apply.yml` via the apply role, after approval | `envs/<env>/terraform.tfstate` + native lock file | Everything per environment |
 
 Cross-cutting rules (implemented ✅ now): Terraform `>= 1.10` (native S3 locking), AWS provider
@@ -189,3 +192,4 @@ sequenceDiagram
 - [ADR 0002](adr/0002-one-stack-per-environment-data.md): one root stack, environments as data.
 - [ADR 0003](adr/0003-no-oidc-trust-for-pull-requests.md): no AWS role is assumable from pull requests.
 - [ADR 0004](adr/0004-static-generated-service-catalog.md): generated static catalog instead of a Backstage server.
+- [ADR 0005](adr/0005-shared-account-with-aiops-project.md): reuse the AIOps account (us-east-2), keep all of its resources.
