@@ -13,7 +13,10 @@ SUMMARY=${GITHUB_STEP_SUMMARY:-/dev/stdout}
 
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 REGISTRY="$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com"
-TAG="git-$GITHUB_SHA"
+# Releases are tagged git-<commit>; rollback-drill images drill-crash-<commit> (drill-image.yml).
+TAG_PREFIX=${TAG_PREFIX:-git}
+[[ $TAG_PREFIX =~ ^(git|drill-crash)$ ]] || { echo "::error::TAG_PREFIX must be git or drill-crash"; exit 2; }
+TAG="$TAG_PREFIX-$GITHUB_SHA"
 echo "$REGISTRY" >"$WORK/registry"
 
 aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY" >/dev/null
@@ -51,6 +54,10 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "digest=$DIGEST" >>"$GITHUB_OUTPUT"; f
   echo "| Pushed now | $PUSHED |"
   echo "| Gates passed before push | build, hardened smoke test, Trivy (HIGH/CRITICAL fixable = 0); SBOM attached |"
   echo
-  echo "To release it: run **app-deploy** with \`image_digest = $DIGEST\`, then approve the \`dev-deploy\` environment."
+  if [ "$TAG_PREFIX" = drill-crash ]; then
+    echo "**Rollback drill image: it exits on start.** Deploying it with **app-deploy** must FAIL and the circuit breaker must roll back (docs/rollback-runbook.md section 2)."
+  else
+    echo "To release it: run **app-deploy** with \`image_digest = $DIGEST\`, then approve the \`dev-deploy\` environment."
+  fi
   echo "First release only (no ECS service yet): set the repository variable \`SERVICE_IMAGE_DIGEST\` to this digest, then terraform-plan and terraform-apply (docs/release-runbook.md)."
 } >>"$SUMMARY"

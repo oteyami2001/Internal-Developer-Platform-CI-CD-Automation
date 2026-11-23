@@ -152,7 +152,13 @@ def test_committed_tfvars_hold_no_identifying_values():
 PYTHON_STANDARD = "3.13"
 
 
-DOCKERFILES = sorted([*(ROOT / "apps").glob("*/Dockerfile"), *(ROOT / "platform" / "templates").glob("*/Dockerfile")])
+DOCKERFILES = sorted(
+    [
+        *(ROOT / "apps").glob("*/Dockerfile"),
+        *(ROOT / "platform" / "templates").glob("*/Dockerfile"),
+        *(ROOT / "platform" / "drills").glob("*/Dockerfile"),
+    ]
+)
 
 
 @pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda p: p.parent.name)
@@ -221,6 +227,9 @@ def test_aws_workflows_exist():
         "terraform-apply.yml",
         "image-build.yml",
         "app-deploy.yml",
+        "drift-detection.yml",
+        "cleanup.yml",
+        "drill-image.yml",
     }
 
 
@@ -229,12 +238,13 @@ def test_aws_jobs_are_gated(path, wf, name, job):
     where = f"{path.name}/{name}"
     assert job.get("if") == "github.ref == 'refs/heads/main'", f"{where}: must be limited to main"
     triggers = set(wf["on"]) if isinstance(wf["on"], dict) else {wf["on"]}
-    if path.name == "image-build.yml":
-        # The one exception: publishing (not deploying) an image after a reviewed merge to main. Its
-        # role trusts ref:refs/heads/main only and can push to ECR, nothing else.
+    if path.name in {"image-build.yml", "drill-image.yml"}:
+        # The exception: publishing (not deploying) an image from main. The image-push role trusts
+        # ref:refs/heads/main only and can push to ECR, nothing else.
         assert "environment" not in job, where
         assert triggers <= {"push", "workflow_dispatch"}, where
-        assert wf["on"]["push"]["branches"] == ["main"], f"{where}: pushes to main only"
+        if "push" in triggers:
+            assert wf["on"]["push"]["branches"] == ["main"], f"{where}: pushes to main only"
     else:
         # A protected environment: the OIDC trust names it, and GitHub enforces reviewers/branches on it.
         assert job.get("environment") in {"dev-plan", "dev", "dev-deploy"}, (
@@ -317,6 +327,57 @@ def test_deploy_request_form_is_a_request_not_a_trigger():
         on = load_workflow(path)["on"]
         triggers = set(on) if isinstance(on, dict) else {on}
         assert not triggers & {"issues", "issue_comment"}, f"{path.name} must not run on issue events"
+
+
+# --- Phase 7: drift detection, cleanup, rollback drill ----------------------------------------------
+def _workflow(name):
+    return load_workflow(ROOT / ".github" / "workflows" / name)
+
+
+def test_drift_detection_reports_but_never_applies():
+    wf = _workflow("drift-detection.yml")
+    job = wf["jobs"]["drift"]
+    assert set(wf["on"]) == {"schedule", "workflow_dispatch"}
+    assert job["environment"] == "dev-plan", "read-only plan role only"
+    assert job["permissions"] == {"contents": "read", "id-token": "write", "issues": "write"}
+    runs = " ".join(step.get("run", "") for step in job["steps"])
+    assert "tf_ci.sh drift dev" in runs
+    assert "tf_ci.sh apply" not in runs and "TF_MODE" not in str(job.get("env", {}))
+
+
+def test_cleanup_is_a_reviewed_confirmed_destroy():
+    wf = _workflow("cleanup.yml")
+    inputs = wf["on"]["workflow_dispatch"]["inputs"]
+    assert inputs["plan_digest"]["required"] is True and inputs["confirm"]["required"] is True
+    job = wf["jobs"]["destroy"]
+    assert job["environment"] == "dev", "required reviewer"
+    assert job["env"]["TF_MODE"] == "destroy"
+    assert job["env"]["EXPECTED_DIGEST"] == "${{ inputs.plan_digest }}"
+    assert job["env"]["CONFIRM_DESTROY"] == "${{ inputs.confirm }}"
+    assert any(step.get("run") == "scripts/tf_ci.sh apply dev" for step in job["steps"])
+
+
+def test_only_cleanup_and_plan_can_select_destroy_mode():
+    for path in WORKFLOWS:
+        if path.name in {"cleanup.yml", "terraform-plan.yml"}:
+            continue
+        assert "TF_MODE" not in path.read_text(encoding="utf-8"), f"{path.name} must never destroy"
+    plan = _workflow("terraform-plan.yml")
+    assert plan["on"]["workflow_dispatch"]["inputs"]["mode"]["options"] == ["apply", "destroy"]
+    assert plan["jobs"]["plan"]["env"]["TF_MODE"] == "${{ inputs.mode }}"
+    assert plan["jobs"]["plan"]["environment"] == "dev-plan", "a destroy PLAN still uses the read-only role"
+
+
+def test_drill_image_is_proven_to_crash_and_scanned_before_push():
+    job = _workflow("drill-image.yml")["jobs"]["build"]
+    names = [s.get("name") or s.get("uses", "") for s in job["steps"]]
+    creds = next(i for i, s in enumerate(job["steps"]) if "configure-aws-credentials" in s.get("uses", ""))
+    crash = next(i for i, n in enumerate(names) if n.startswith("Prove it exits with an error"))
+    gate = next(i for i, s in enumerate(job["steps"]) if s.get("with", {}).get("exit-code") == "1")
+    assert crash < creds and gate < creds
+    assert _workflow("drill-image.yml")["env"]["TAG_PREFIX"] == "drill-crash"
+    dockerfile = (ROOT / "platform" / "drills" / "crash-on-start" / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY" not in dockerfile and "ADD " not in dockerfile, "the drill image contains no application code"
 
 
 CIDR = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})/\d{1,2}(?![\d.])")

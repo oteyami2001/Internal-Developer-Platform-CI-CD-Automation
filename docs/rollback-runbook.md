@@ -1,7 +1,8 @@
 # Rollback runbook
 
-> 📋 **Planned (Phase 7).** These procedures are designed but have not been executed against AWS.
-> Each step will be rehearsed and timestamped in [portfolio-evidence.md](portfolio-evidence.md) before it is marked verified.
+> 🛠️✅ **Implemented and tested offline (Phase 7).** §3 (redeploy a digest) is ☁️ verified in Phase 5.
+> The drill in §2, drift detection (§5) and cleanup (§6) are marked ☁️ in
+> [portfolio-evidence.md](portfolio-evidence.md) once they have run in AWS.
 
 ## 1. Decision table
 
@@ -28,8 +29,24 @@ aws ecs describe-services --cluster idp-dev --services sample-api --query 'servi
 ```
 
 Expected: a `PRIMARY` deployment on the previous task definition with rollout `COMPLETED`, and a
-`FAILED` deployment with a circuit-breaker reason. The EventBridge rule (Phase 7) forwards the state
-change to SNS and to a log group.
+`FAILED` deployment with a circuit-breaker reason. The EventBridge rule forwards the state change to
+SNS (e-mail) and to the `/aws/events/idp-dev/ecs-deployments` log group.
+
+### Drill: prove the circuit breaker works
+
+1. **Actions → drill-image → Run workflow** (branch `main`). It builds
+   `platform/drills/crash-on-start` (an image that exits with status 1 on start and contains no
+   application code), **proves it crashes**, scans it, and publishes it as `drill-crash-<commit>`.
+   Copy the digest from the summary.
+2. **Actions → app-deploy → Run workflow** with that digest, then approve `dev-deploy`.
+3. Expected within ~5 minutes:
+   - the new tasks exit, ECS marks the deployment `FAILED` (circuit breaker) and rolls back;
+   - **the app-deploy job fails** with the circuit-breaker reason. That failure is the success
+     criterion; a "stable" result would mean the breaker did not work;
+   - `/health` keeps answering `200` throughout (the old task keeps serving, minimum healthy 100%);
+   - an e-mail from the alert topic reports the failed deployment.
+4. Record the run, the times and the revisions in the evidence. Nothing needs undoing: the service is
+   back on the last good revision.
 
 ## 3. Manual: redeploy the last known-good digest
 
@@ -59,12 +76,25 @@ and record why.
 
 ## 5. Drift
 
-`drift-detection.yml` runs `terraform plan -detailed-exitcode` on a schedule. Exit code 2 opens an
-issue with the plan summary. It **never applies**. Resolve the drift by either codifying the
-manual change in Terraform (PR) or reverting it through the normal plan → approve → apply flow.
+`drift-detection.yml` runs every Monday at 07:17 UTC (and on demand) with the read-only plan role.
+If real infrastructure differs from the code, it opens an issue **Drift detected: dev** (label
+`drift`), or comments on the open one, listing resource addresses and actions (no values: issues are
+public), and the run fails so you get a notification. It **never applies**.
+
+Resolve the drift by either codifying the manual change in Terraform (PR), or restoring the code's
+state: **terraform-plan** → review → **terraform-apply** with the digest → approve `dev`. Then run
+drift-detection again (expected: "No drift") and close the issue.
 
 ## 6. Cost emergency
 
-Run `cleanup.yml`: review the destroy plan of the workload resources, approve, verify that no
-ALB, ECS tasks, Elastic IPs or NAT gateways remain (`scripts/aws_discovery.sh` cost checks).
-Bootstrap resources stay.
+Remove the dev environment (stops the ~$1/day of ALB, Fargate and public IPv4 costs):
+
+1. **Actions → terraform-plan → Run workflow**, `mode = destroy`. Review: every line is a `delete`
+   of an `idp-dev` workload resource. Copy the plan digest.
+2. **Actions → cleanup → Run workflow** with `plan_digest` and `confirm = destroy-dev`, then approve
+   `dev`. The job refuses unless the digest matches the reviewed destroy plan (a normal apply digest
+   never matches), destroys exactly that plan, then **verifies** that the Terraform state is empty
+   and that the `idp-dev` load balancer no longer exists.
+3. Kept: the bootstrap (state bucket, CloudTrail, CI roles, ECR images, budget). Rebuild any time
+   with terraform-plan (`mode = apply`) → terraform-apply; `SERVICE_IMAGE_DIGEST` recreates the
+   service with the first image, then release the current digest with app-deploy.

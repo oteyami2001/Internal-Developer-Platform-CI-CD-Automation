@@ -1,0 +1,76 @@
+# Remove the dev environment (Phase 7): a reviewed, digest-gated destroy, then verification.
+#
+#   1. Run terraform-plan with mode = destroy and review the plan: only idp-dev workload resources.
+#   2. Run this workflow with that plan digest and confirm = destroy-dev.
+#   3. Approve the `dev` environment (required reviewer). The job re-plans the destroy and REFUSES
+#      unless the digest matches the reviewed one (the digest covers the mode, so a normal apply
+#      digest never authorises a destroy). Then it destroys and verifies nothing is left.
+#
+# Kept: everything in terraform/bootstrap (state bucket, CloudTrail, CI roles, ECR images, budget).
+# Rebuild later with terraform-plan (mode = apply) and terraform-apply.
+name: cleanup
+
+# checkov:skip=CKV_GHA_7:plan_digest and confirm are safety gates, not build parameters: they only make the job refuse.
+on:
+  workflow_dispatch:
+    inputs:
+      plan_digest:
+        description: Digest from the reviewed terraform-plan run with mode = destroy (64 hex characters)
+        type: string
+        required: true
+      confirm:
+        description: Type destroy-dev to confirm
+        type: string
+        required: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: terraform-dev
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    name: destroy dev (approved, verified)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: dev # required reviewer approves before this job receives credentials
+    permissions:
+      contents: read
+      id-token: write # OIDC: the apply role trusts only environment:dev
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+      ALLOWED_INGRESS_CIDR: ${{ secrets.ALLOWED_INGRESS_CIDR }}
+      SERVICE_IMAGE_DIGEST: ${{ vars.SERVICE_IMAGE_DIGEST }}
+      TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+      TF_MODE: destroy
+      EXPECTED_DIGEST: ${{ inputs.plan_digest }}
+      CONFIRM_DESTROY: ${{ inputs.confirm }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install manifest renderer dependencies
+        run: python -m pip install --disable-pip-version-check jsonschema==4.26.0 PyYAML==6.0.3
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.2
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: idp-dev-cleanup-${{ github.run_id }}
+          mask-aws-account-id: true
+      - name: Verify digest, destroy the reviewed plan, verify nothing is left
+        run: scripts/tf_ci.sh apply dev

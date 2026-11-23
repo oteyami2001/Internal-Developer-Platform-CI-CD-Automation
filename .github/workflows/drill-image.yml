@@ -1,0 +1,69 @@
+# Publish the rollback-drill image (Phase 7): manual, main only.
+#
+# Builds platform/drills/crash-on-start, PROVES it crashes (a drill image that starts would prove
+# nothing), scans it, and pushes it as idp/sample-api:drill-crash-<commit> with the same image-push
+# role and checks as image-build (single manifest, immutable tag, digest published). Releasing it is
+# a normal app-deploy, behind the same dev-deploy approval; the expected result is a FAILED rollout
+# and an automatic circuit-breaker rollback (docs/rollback-runbook.md section 2).
+name: drill-image
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: drill-image-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  TRIVY_VERSION: v0.76.2
+  IMAGE: drill-crash:build
+  ECR_REPOSITORY: idp/sample-api
+  TAG_PREFIX: drill-crash
+
+jobs:
+  build:
+    name: build, prove it crashes, scan, push (drill)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # OIDC: the image-push role trusts only ref:refs/heads/main
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the drill image (single manifest)
+        run: docker build --provenance=false --sbom=false -t "$IMAGE" platform/drills/crash-on-start
+      - name: Prove it exits with an error (hardened run, like ECS)
+        run: |
+          rc=0
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges "$IMAGE" || rc=$?
+          echo "drill container exit code: $rc"
+          if [ "$rc" -eq 0 ]; then echo "::error::the drill image must exit with an error"; exit 1; fi
+      - name: Trivy image gate (HIGH/CRITICAL with a fix available fails the build)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_IMAGE_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: idp-drill-push-${{ github.run_id }}
+          mask-aws-account-id: true
+      - name: Push by immutable tag, publish the digest
+        run: scripts/push_image.sh
+      - name: Log out of ECR
+        if: always()
+        run: docker logout "$(cat "$RUNNER_TEMP/registry" 2>/dev/null || echo none)" >/dev/null 2>&1 || true
