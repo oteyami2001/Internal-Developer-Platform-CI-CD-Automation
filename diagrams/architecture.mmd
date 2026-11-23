@@ -1,9 +1,10 @@
-%% Internal Developer Platform - logical architecture (dev MVP topology)
+%% Internal Developer Platform - logical architecture (dev topology, AWS-verified 2026-11-23)
 flowchart LR
   subgraph DevEx["Developer experience (GitHub)"]
     dev([Developer]) -->|PR: code + service.yaml| repo[(Repository)]
     repo --> ci[ci.yml<br/>tests, lint, SAST,<br/>manifest + Terraform checks]
-    repo --> catalog[[Service catalog<br/>platform/catalog/services.yaml]]
+    repo --> catalog[[Service catalog<br/>generated from service.yaml]]
+    repo --> tmpl[[Golden-path template<br/>scripts/new_service.py]]
   end
 
   subgraph Gates["Protected GitHub environments"]
@@ -29,7 +30,7 @@ flowchart LR
       end
       priv[Private subnets<br/>defined, unused in MVP<br/>no NAT Gateway]
     end
-    cw[CloudWatch<br/>logs, alarms, dashboard]
+    cw[CloudWatch<br/>logs, 7 alarms, dashboard,<br/>deployment events]
     sns[SNS e-mail]
     budget[AWS Budgets]
   end
@@ -46,3 +47,5 @@ flowchart LR
   internet([Operator /32]) --> alb -->|SG: ALB -> task only| task
   task --> cw --> sns
   budget --> sns
+  drift[drift-detection.yml<br/>weekly, read-only] -.issue on drift.-> repo
+  drift --> rPlan

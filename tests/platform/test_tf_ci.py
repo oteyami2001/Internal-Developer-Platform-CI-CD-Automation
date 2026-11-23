@@ -237,12 +237,20 @@ def test_drift_reports_nothing_when_infrastructure_matches(stub):
 
 
 def test_drift_is_reported_with_addresses_only_and_never_applied(stub):
-    result = stub("drift")
+    result = stub("drift", STUB_STATE="module.network.aws_vpc.this\n")
     assert result.returncode == 3, result.stdout
     report = (stub.dir / "drift.md").read_text()
     assert "`module.network.aws_vpc.this`" in report and "| create |" in report
     assert "10.40.0.0/20" not in report  # no values: the report becomes a public issue
     assert not (stub.dir / "applied").exists()
+
+
+def test_drift_reports_not_deployed_after_cleanup(stub):
+    """Empty state + 'create everything' is an environment that was cleaned up, not drift."""
+    result = stub("drift", STUB_STATE="")
+    assert result.returncode == 0, result.stdout
+    assert "is not deployed" in result.stdout
+    assert not (stub.dir / "drift.md").exists()
 
 
 def test_drift_never_runs_in_destroy_mode(stub):

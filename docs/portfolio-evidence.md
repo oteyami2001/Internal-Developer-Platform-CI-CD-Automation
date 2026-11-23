@@ -3,6 +3,16 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Phase 8 — Validation and portfolio (2026-11-23)
+
+| # | Check | Evidence | Result |
+|---|---|---|---|
+| P8-1 | Scenario 3 on a real PR: demo PR #17 set the ECR repository's tags to `MUTABLE` | Run 45278084468: Terraform test `tags must be immutable` (expected `IMMUTABLE`, actual `MUTABLE`), Checkov `CKV_AWS_51` FAILED, Trivy misconfiguration FAILED, `ci-ok` red → merge blocked. Honest note: the first run (45277567552) failed the Terraform job at `terraform fmt` (the demo comment broke alignment); the formatting-only fix let the security test run. Closed unmerged; both commits reverted | ✅ |
+| P8-2 | Recruiter overview with measured numbers only ([portfolio-overview.md](portfolio-overview.md)), delivery-flow diagram ([diagrams/delivery-flow.mmd](../diagrams/delivery-flow.mmd)), refreshed architecture diagram | Counted at commit time: 241 platform tests, 27 service tests, 65 Terraform test runs, 8 workflows, 6 ADRs | ✅ |
+| P8-3 | Scenario 11: CloudWatch records deployment events (owner screenshots of the `idp-dev` dashboard and the alarm list, ~22:25) | The dashboard's "ECS deployment events" widget (EventBridge → `/aws/events/idp-dev/ecs-deployments`) shows the drill timeline: 21:43:09 `SERVICE_DEPLOYMENT_IN_PROGRESS` (drill) → 21:47:53 `SERVICE_DEPLOYMENT_FAILED` → 21:47:53 `IN_PROGRESS` (automatic rollback) → **21:49:08 `SERVICE_DEPLOYMENT_COMPLETED` + `SERVICE_STEADY_STATE`**. So the bad release healed in ~6 minutes, with the dip visible on the CPU/memory widget. All 7 alarms `OK` · Application log group `/idp/dev/sample-api` (owner screenshots, ~22:30): retention 1 week (as coded), **8 log streams, one per task**, last events 08:38–09:05 (Phase 5 releases) and 21:43–21:47 (the drill's crashing tasks and the rollback). Stream contents were not opened in the screenshots | ☁️ |
+| P8-4 | **Scenario 12: cleanup**. Destroy plan: terraform-plan run 45282787268 (`mode = destroy`, 22:46): `Plan: 0 to add, 0 to change, 47 to destroy.` = network 18, observability 16, service 7, load balancer 4, cluster 2. Nothing from the bootstrap, ECR, state, CloudTrail or other projects. No account ID, IP or e-mail in the log | `cleanup` run 45283263149, owner approved `dev`, 22:53:46–22:56:59: digest matched; `Apply complete! Resources: 0 added, 0 changed, 47 destroyed.`; **`Cleanup of dev verified.`** (empty state, no `idp-dev` load balancer) | ☁️ |
+| P8-5 | Defect found after cleanup: the weekly drift detection would have reported the whole removed environment as drift (a false issue every Monday) | `tf_ci.sh drift` now reports "not deployed (empty state)" and exits 0; test + mutation check | ✅ fixed |
+
 ## Phase 7 — Operations and recovery (code, 2026-11-23)
 
 Approved by the owner 2026-11-23. Code and offline tests. The AWS drills (circuit-breaker
@@ -19,7 +29,7 @@ rollback, manual drift, cleanup) follow, each recorded below when run.
 | P7-7 | Lint and scans: Ruff, Bandit, actionlint, zizmor, shellcheck, Checkov (dockerfile 175 passed, github_actions 408 passed, 0 failed) | ✅ |
 | P7-A0 | First `drill-image` run 45271338917 (21:36) | **Blocked by the Trivy gate, as designed:** the drill Dockerfile used the unpatched base image (zlib1g HIGH; pip-vendored msgpack/urllib3 and setuptools HIGH, all with fixes). Nothing was pushed. Fix: the same OS patching and pip removal as the service image, plus a hygiene test that every Dockerfile has both | ❌ → fixed |
 | P7-A0b | `drill-image` run 45272042704 (21:40, after the fix) | Built; **proven to exit with an error**; Trivy 0 vulnerabilities; pushed `drill-crash-2139f6b…` = `sha256:24790e7d…568b224` (single manifest) | ✅ |
-| P7-A1 | **Circuit-breaker drill** (scenario 9): `app-deploy` run 45272318380 with the drill digest, owner approved `dev-deploy` | `Registered idp-dev-sample-api:5`; rollout `IN_PROGRESS` 21:43 → **`FAILED` 21:48:07**: "ECS deployment circuit breaker: tasks failed to start." The job **failed as designed**, and the service stayed on / returned to revision 4 (minimum healthy 100%: the old task kept serving) | ✅ |
+| P7-A1 | **Circuit-breaker drill** (scenario 9): `app-deploy` run 45272318380 with the drill digest, owner approved `dev-deploy` | `Registered idp-dev-sample-api:5`; rollout `IN_PROGRESS` 21:43 → **`FAILED` 21:48:07**: "ECS deployment circuit breaker: tasks failed to start." The job **failed as designed**, and the service stayed on / returned to revision 4 (minimum healthy 100%: the old task kept serving). ECS events (P8-3): rollback deployment `COMPLETED` at 21:49:08 | ✅ |
 | P7-A2 | **Drift drill** (scenario 10): owner edited the `idp-dev-latency-p95` description in the console (~21:55) | `drift-detection` run 45274612556: `Plan: 0 to add, 1 to change, 0 to destroy`, issue **#15 "Drift detected: dev"** opened with the address only, run failed, **nothing changed**. Restored through the reviewed flow: plan run 45274873631 (it also revealed that the console silently set `datapoints_to_alarm = 2`), apply run 45275325130 with the reviewed digest + `dev` approval (22:00–22:01). Drift run 45276242898: **no drift**; issue #15 closed | ✅ |
 | P7-A3 | Cleanup verified | ⏳ (on request: it removes the running environment) |
 
@@ -389,15 +399,15 @@ explicit SCP deny. us-east-2: no ECS, ALB, NAT, EIP or secrets left; month-to-da
 
 | # | Scenario | Status |
 |---|---|---|
-| 1 | Developer creates a new service from a template | 📋 Phase 6 |
+| 1 | Developer creates a new service from a template | ✅ in CI on every PR: P6-1 (generated `orders-api` passes manifest, own tests 100% coverage, Ruff); PR #12 green |
 | 2 | PR triggers tests and security scans | ✅ PR #1, runs 45096890726 (caught a real failure) and 45097129693 (green) |
-| 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9, P2-9); 📋 on a GitHub PR |
+| 3 | Insecure Terraform change fails validation | ✅ on GitHub: demo PR #17 (ECR tags `MUTABLE`) blocked by Terraform test, Checkov `CKV_AWS_51` and Trivy (run 45278084468); closed unmerged, reverted (P8-1) |
 | 4 | Container image built and scanned | ✅ in CI on GitHub (run 45097129693, Trivy gate passed) |
 | 5 | Approved image published to ECR | ☁️ P5-A1, P5-A7b |
 | 6 | Authorized deployment updates ECS Fargate | ☁️ P5-A3 (first release), P5-A7, P5-A7c |
 | 7 | Unapproved deployment is blocked | ☁️ P5-A8 (rejected: job never started, no credentials) |
-| 8 | Application passes health checks | ✅ locally (E13); 📋 behind ALB |
+| 8 | Application passes health checks | ☁️ `/health` → `{"status":"ok"}` through the ALB (P5-A4); ALB `HealthyHostCount` 1 (P5-A5); every app-deploy verifies healthy targets (P5-A7, P5-A7c) |
 | 9 | Failing release is rolled back | ☁️ P7-A1 (circuit breaker, job failed as designed) |
 | 10 | Configuration drift detected | ☁️ P7-A2 (issue #15, nothing changed, restored via reviewed apply) |
-| 11 | CloudWatch records deployment and application events | 📋 Phase 4/7 (JSON logging ✅ E13) |
-| 12 | Cleanup removes billable workload resources | 📋 Phase 7 |
+| 11 | CloudWatch records deployment and application events | ☁️ P8-3: deployment events (full drill timeline) + application log group with one stream per task; JSON log format ✅ locally (E13) |
+| 12 | Cleanup removes billable workload resources | ☁️ P8-4 (47 destroyed, verified empty state and no load balancer) |
