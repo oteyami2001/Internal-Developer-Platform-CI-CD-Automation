@@ -64,6 +64,17 @@ run "hardened_container_definition" {
     error_message = "stop timeout must exceed the app's 20 s drain"
   }
   assert {
+    # ECS's normalised form: anything missing here is a perpetual replace-diff (Phase 5 drift check).
+    condition = alltrue([
+      jsondecode(aws_ecs_task_definition.this.container_definitions)[0].portMappings[0].hostPort == 8080,
+      jsondecode(aws_ecs_task_definition.this.container_definitions)[0].mountPoints == [],
+      jsondecode(aws_ecs_task_definition.this.container_definitions)[0].volumesFrom == [],
+      jsondecode(aws_ecs_task_definition.this.container_definitions)[0].systemControls == [],
+      jsondecode(aws_ecs_task_definition.this.container_definitions)[0].linuxParameters.capabilities.add == [],
+    ])
+    error_message = "container definition must spell out the defaults ECS stores, or every plan replaces it"
+  }
+  assert {
     condition     = aws_ecs_task_definition.this.family == "idp-dev-sample-api"
     error_message = "family must match the deploy role's task-definition/idp-dev-* scope"
   }

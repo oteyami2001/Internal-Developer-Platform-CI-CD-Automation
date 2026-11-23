@@ -3,10 +3,32 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
-## Phase 5 — Delivery pipeline (code, 2026-11-23)
+## Phase 5 — Delivery pipeline (2026-11-23)
 
-Approved by the owner 2026-11-23. Code and offline tests only so far: **no image has been pushed
-and nothing has been deployed yet** ([release-runbook.md](release-runbook.md)).
+Approved by the owner 2026-11-23 ([release-runbook.md](release-runbook.md)).
+
+### AWS (☁️ AWS-verified)
+
+| # | Step | Evidence | Result |
+|---|---|---|---|
+| P5-A1 | `image-build` run 45126795712, 06:50 (started automatically by the merge of PR #7) | Build, hardened smoke test, Trivy gate, SBOM artifact, then push with the image-push role. `idp/sample-api:git-20df65c…` = `sha256:09dbd1aa…59ec06`, 37 s | ✅ |
+| P5-A2 | First release plan (run 45134130274, 07:51, after the log fix) | `Plan: 10 to add, 1 to change, 0 to destroy.`: 7 service resources, 3 service alarms, dashboard widget. The log shows the IP, account ID and e-mail only as `***` (checked by search) | ✅ |
+| P5-A3 | `terraform-apply` run 45134553241, 07:55–07:57, owner approved `dev` | Reviewed digest `d212d307…99493831` matched; `Apply complete! Resources: 10 added, 1 changed, 0 destroyed.`; ECS service steady after 1 min 27 s | ✅ |
+| P5-A4 | `/health` from the operator's browser | `{"status":"ok"}` (was `503` before the release) | ✅ |
+| P5-A5 | CloudWatch (owner screenshot, ~08:01) | 7 alarms, all `OK`; `HealthyHostCount` = 1. `no-healthy-targets` was briefly in ALARM because it was created seconds before the first task started | ✅ |
+| P5-A6 | Drift check, run 45135379914, 08:02 | **Drift found:** `1 to add, 1 to destroy`. The task definition would be replaced because of the defaults ECS stores (defect below) | ❌ → fixed in code, re-check pending |
+| P5-A7 | `app-deploy` release + rejected/unapproved deploy (scenarios 6, 7) | Not run yet | ⏳ |
+
+**Defect found in AWS: perpetual task-definition replacement.** ECS returns the container
+definition in a normalised form. It adds `hostPort` (= `containerPort` in awsvpc mode) and empty
+`mountPoints`, `volumesFrom`, `systemControls` and `capabilities.add`. Terraform saw each of
+these as a change that forces replacement, so every plan would register a new revision and
+deregister the old one. The mocked-provider tests could not see this: only a real ECS round trip
+shows it. Fix: the module writes those defaults out. A contract test pins them (and fails if
+`hostPort` is removed). The service itself was never affected, because it ignores
+`task_definition` changes.
+
+### Code and offline tests
 
 | # | Check | Result |
 |---|---|---|
@@ -29,7 +51,11 @@ echoes the job's `env`. `mask-aws-account-id` only masks after the credentials s
 plan/apply logs had the same problem. Fix: these values are now *secrets*, which GitHub masks from
 the first line. The configuration script deletes the old variables. A hygiene test allows only
 `AWS_REGION` and `SERVICE_IMAGE_DIGEST` as variables, and it fails if the IP is moved back.
-Earlier run logs are deleted with the owner's approval.
+With the owner's approval, the logs of the 8 affected runs were deleted on 2026-11-23 around
+07:30 UTC: plan 45115730322, 45118508549, 45120116740, 45121998148, 45127566917; apply 45116102618,
+45121248014; image-build 45126795712. The API returns 404 for them now. The runs, results and summaries
+remain, and their evidence is recorded in this file. Verified: the first run after the fix
+(45130666726) printed no identifying value.
 
 **Design decisions:**
 - The runner does not probe `/health`, because the ALB admits only the operator /32 (SE-2). Verification is the
