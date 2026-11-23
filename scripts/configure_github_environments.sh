@@ -12,7 +12,9 @@
 # Each AWS role trusts exactly one of these environments (or refs/heads/main for image push), so
 # a job that is not in the approved environment cannot obtain AWS credentials at all.
 #
-# Usage:  scripts/configure_github_environments.sh <aws_account_id> <alert_email> [owner/repo]
+# Usage:  [ALLOWED_INGRESS_CIDR=x.x.x.x/32] scripts/configure_github_environments.sh <aws_account_id> <alert_email> [owner/repo]
+#         ALLOWED_INGRESS_CIDR (the operator's /32 for the HTTP demo listener) is set on dev-plan and
+#         dev when provided: both the plan and the apply job need it.
 # Then:   scripts/verify_github_settings.sh   (checks reviewers and branch policies via the API)
 set -euo pipefail
 
@@ -67,7 +69,14 @@ gh variable set AWS_ROLE_ARN    --repo "$REPO" --env dev        --body "$ROLE-de
 gh variable set AWS_ROLE_ARN    --repo "$REPO" --env dev-deploy --body "$ROLE-dev-github-deploy"
 gh variable set AWS_IMAGE_PUSH_ROLE_ARN --repo "$REPO" --body "$ROLE-github-image-push"
 
-# Personal data goes in a secret so GitHub masks it in logs.
+# Personal data goes in a secret so GitHub masks it in logs. Plan and apply both need it.
+gh secret set ALERT_EMAIL --repo "$REPO" --env dev-plan --body "$ALERT_EMAIL"
 gh secret set ALERT_EMAIL --repo "$REPO" --env dev --body "$ALERT_EMAIL"
+
+if [ -n "${ALLOWED_INGRESS_CIDR:-}" ]; then
+  [[ $ALLOWED_INGRESS_CIDR =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/32$ ]] || { echo "ALLOWED_INGRESS_CIDR must be a /32" >&2; exit 2; }
+  gh variable set ALLOWED_INGRESS_CIDR --repo "$REPO" --env dev-plan --body "$ALLOWED_INGRESS_CIDR"
+  gh variable set ALLOWED_INGRESS_CIDR --repo "$REPO" --env dev --body "$ALLOWED_INGRESS_CIDR"
+fi
 
 echo "done. Verify with: scripts/verify_github_settings.sh $REPO"

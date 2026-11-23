@@ -1,30 +1,31 @@
-# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
-# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
-
-# MODULE CONTRACT (Phase 1 skeleton - resources are implemented in Phase 4)
-#
-# Planned resources:
-#   aws_lb (application, internet-facing, drop_invalid_header_fields = true)
-#   aws_security_group (ingress only from allowed_ingress_cidrs on 80/443; egress only to the VPC)
-#   aws_lb_target_group (ip targets, health check on the manifest path, short deregistration delay)
-#   aws_lb_listener HTTP:80 -> forward (dev /32 demo) OR redirect to HTTPS:443 when a certificate is set
-#   aws_lb_listener HTTPS:443 (ELBSecurityPolicy-TLS13-1-2-2021-06) when certificate_arn is set
+# Internet-facing Application Load Balancer for one service (MVP: one service per environment).
+#   - Without a certificate (dev demo): HTTP:80 forwards, and ingress is limited to /32 host addresses
+#     (validated). With a certificate: HTTP redirects to HTTPS:443 (TLS 1.2/1.3 policy).
+#   - Egress only to the VPC on the target port: the ALB cannot reach the internet.
+#   - drop_invalid_header_fields, strictest desync mitigation.
 
 variable "name_prefix" {
-  type = string
+  description = "Resource name prefix, e.g. idp-dev (ALB/target group names must stay <= 32 chars)."
+  type        = string
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{2,15}$", var.name_prefix))
+    error_message = "name_prefix must be 3-16 lowercase characters."
+  }
 }
 
 variable "vpc_id" {
-  type = string
+  description = "VPC for the target group and security group."
+  type        = string
 }
 
 variable "vpc_cidr" {
-  description = "ALB egress is limited to the VPC (targets only)."
+  description = "ALB egress is limited to this CIDR (the targets)."
   type        = string
 }
 
 variable "public_subnet_ids" {
-  type = list(string)
+  description = "Public subnets in at least two AZs."
+  type        = list(string)
   validation {
     condition     = length(var.public_subnet_ids) >= 2
     error_message = "An ALB requires subnets in at least two Availability Zones."
@@ -32,12 +33,19 @@ variable "public_subnet_ids" {
 }
 
 variable "certificate_arn" {
-  type    = string
-  default = null
+  description = "ACM certificate. null = HTTP-only demo mode (requires /32 ingress)."
+  type        = string
+  default     = null
 }
 
 variable "allowed_ingress_cidrs" {
-  type = list(string)
+  description = "Source CIDRs allowed to reach the listener(s). Personal data: marked sensitive."
+  type        = list(string)
+  sensitive   = true
+  validation {
+    condition     = length(var.allowed_ingress_cidrs) >= 1 && alltrue([for c in var.allowed_ingress_cidrs : can(cidrnetmask(c))])
+    error_message = "Provide at least one valid IPv4 CIDR."
+  }
   validation {
     condition     = var.certificate_arn != null || alltrue([for c in var.allowed_ingress_cidrs : endswith(c, "/32")])
     error_message = "Without HTTPS, ingress must be restricted to /32 host addresses."
@@ -45,12 +53,22 @@ variable "allowed_ingress_cidrs" {
 }
 
 variable "target_port" {
-  type = number
+  description = "Container port the target group forwards to."
+  type        = number
+  validation {
+    condition     = var.target_port >= 1024 && var.target_port <= 65535
+    error_message = "target_port must be an unprivileged port."
+  }
 }
 
-variable "health_check_path" {
-  type    = string
-  default = "/health"
+variable "health_check" {
+  description = "Target health check, from the validated service manifest."
+  type = object({
+    path                = string
+    interval_seconds    = number
+    healthy_threshold   = number
+    unhealthy_threshold = number
+  })
 }
 
 variable "deregistration_delay_seconds" {
@@ -67,15 +85,4 @@ variable "enable_deletion_protection" {
   description = "true for prod; false for dev so approved cleanup can remove it."
   type        = bool
   default     = false
-}
-
-variable "access_logs_bucket" {
-  description = "Optional S3 bucket for ALB access logs (recommended for prod)."
-  type        = string
-  default     = null
-}
-
-variable "tags" {
-  type    = map(string)
-  default = {}
 }

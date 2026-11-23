@@ -3,6 +3,7 @@
 These turn conventions into failing tests, so a future change cannot quietly weaken them.
 """
 
+import ipaddress
 import json
 import re
 import subprocess
@@ -192,3 +193,77 @@ def test_dependabot_never_proposes_python_minor_or_major_jumps():
         assert rules, "python base image must have an ignore rule"
         types = {t for r in rules for t in r.get("update-types", [])}
         assert types == {"version-update:semver-major", "version-update:semver-minor"}, types
+
+
+# --- Workflows that can obtain AWS credentials -------------------------------------------------
+def _aws_jobs():
+    for path in WORKFLOWS:
+        wf = load_workflow(path)
+        for name, job in wf["jobs"].items():
+            if (job.get("permissions") or {}).get("id-token") == "write":
+                yield path, wf, name, job
+
+
+def test_aws_workflows_exist():
+    assert {p.name for p, *_ in _aws_jobs()} >= {"terraform-plan.yml", "terraform-apply.yml"}
+
+
+@pytest.mark.parametrize(("path", "wf", "name", "job"), list(_aws_jobs()), ids=lambda v: getattr(v, "name", None))
+def test_aws_jobs_are_gated(path, wf, name, job):
+    where = f"{path.name}/{name}"
+    # A protected environment: the OIDC trust names it, and GitHub enforces reviewers/branches on it.
+    assert job.get("environment") in {"dev-plan", "dev", "dev-deploy"}, f"{where}: must run in a protected environment"
+    assert job.get("if") == "github.ref == 'refs/heads/main'", f"{where}: must be limited to main"
+    triggers = set(wf["on"]) if isinstance(wf["on"], dict) else {wf["on"]}
+    assert triggers <= {"workflow_dispatch", "schedule"}, f"{where}: AWS workflows are manual (or scheduled) only"
+    creds = [s for s in job["steps"] if str(s.get("uses", "")).startswith("aws-actions/configure-aws-credentials@")]
+    assert len(creds) == 1, f"{where}: exactly one credentials step"
+    assert creds[0]["with"].get("mask-aws-account-id") is True, f"{where}: mask the account ID in public logs"
+    assert "role-to-assume" in creds[0]["with"] and "aws-access-key-id" not in creds[0]["with"], where
+
+
+def test_apply_requires_the_reviewed_digest():
+    wf = load_workflow(ROOT / ".github" / "workflows" / "terraform-apply.yml")
+    assert wf["on"]["workflow_dispatch"]["inputs"]["plan_digest"]["required"] is True
+    job = wf["jobs"]["apply"]
+    assert job["environment"] == "dev"
+    assert job["env"]["EXPECTED_DIGEST"] == "${{ inputs.plan_digest }}"
+    assert any("tf_ci.sh apply" in s.get("run", "") for s in job["steps"])
+    plan = load_workflow(ROOT / ".github" / "workflows" / "terraform-plan.yml")
+    assert plan["jobs"]["plan"]["environment"] == "dev-plan"
+    assert "upload-artifact" not in (ROOT / ".github" / "workflows" / "terraform-plan.yml").read_text(), (
+        "plan files contain plaintext variables: never upload them from a public repository"
+    )
+
+
+CIDR = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})/\d{1,2}(?![\d.])")
+
+
+def test_no_public_ip_addresses_are_committed():
+    """The operator's home /32 is personal data: it lives only in a GitHub environment variable."""
+    allowed_networks = [
+        ipaddress.ip_network(n)
+        for n in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "0.0.0.0/32", "255.255.255.255/32")
+    ]
+    files = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],  # noqa: S607
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    offenders = []
+    for name in files:
+        path = ROOT / name
+        if not path.is_file() or path.suffix in {".png", ".jpg", ".zip"} or name.endswith(".lock.hcl"):
+            continue
+        # CIDR notation only (that is how ingress addresses are written); bare dotted numbers are
+        # mostly 4-part package versions.
+        for match in CIDR.finditer(path.read_text(errors="ignore")):
+            try:
+                ip = ipaddress.ip_address(match.group(1))
+            except ValueError:
+                continue
+            if ip.is_global and not any(ip in net for net in allowed_networks):
+                offenders.append(f"{name}: {ip}")
+    assert offenders == [], offenders

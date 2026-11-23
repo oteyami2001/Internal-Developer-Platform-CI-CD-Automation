@@ -1,0 +1,63 @@
+# Read-only Terraform plan for an environment (Phase 4).
+#
+#   - Runs in the `dev-plan` GitHub environment (main only), so it can assume ONLY the read-only
+#     plan role (`idp-dev-github-plan`, trust = environment:dev-plan). No pull request can use it.
+#   - Publishes a reviewable summary and a PLAN DIGEST. Nothing sensitive is uploaded: the plan
+#     file itself is never stored (public repository; see scripts/tf_ci.sh).
+#   - To apply: run terraform-apply.yml with that digest, and approve the `dev` environment.
+name: terraform-plan
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: terraform-dev # plans and applies of one environment never overlap (state lock)
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: terraform plan (dev)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: dev-plan
+    permissions:
+      contents: read
+      id-token: write # OIDC: the plan role trusts only environment:dev-plan
+    outputs:
+      digest: ${{ steps.plan.outputs.digest }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      ALLOWED_INGRESS_CIDR: ${{ vars.ALLOWED_INGRESS_CIDR }}
+      SERVICE_IMAGE: ${{ vars.SERVICE_IMAGE }}
+      TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install manifest renderer dependencies
+        run: python -m pip install --disable-pip-version-check jsonschema==4.26.0 PyYAML==6.0.3
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.2
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: idp-dev-plan-${{ github.run_id }}
+          mask-aws-account-id: true
+      - name: terraform plan + digest
+        id: plan
+        run: scripts/tf_ci.sh plan dev

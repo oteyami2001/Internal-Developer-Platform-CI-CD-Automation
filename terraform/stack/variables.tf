@@ -1,6 +1,3 @@
-# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
-# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
-
 # One root configuration shared by dev, staging and prod. Environments differ ONLY in data
 # (terraform/envs/<env>/terraform.tfvars + backend.hcl), which keeps them structurally identical:
 # what is tested in dev is what is promoted to prod.
@@ -76,6 +73,7 @@ variable "certificate_arn" {
 variable "allowed_ingress_cidrs" {
   description = "CIDRs allowed to reach the load balancer. Without HTTPS, only single-host /32 ranges are accepted."
   type        = list(string)
+  sensitive   = true # the operator's home IP: personal data, kept out of plan output and CI logs
   validation {
     condition     = length(var.allowed_ingress_cidrs) >= 1 && length(var.allowed_ingress_cidrs) <= 10
     error_message = "Provide between 1 and 10 ingress CIDRs."
@@ -94,8 +92,9 @@ variable "allowed_ingress_cidrs" {
 }
 
 variable "alert_email" {
-  description = "E-mail address for SNS alarm and budget notifications."
+  description = "E-mail address for SNS alarm notifications."
   type        = string
+  sensitive   = true
   validation {
     condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[a-zA-Z]{2,}$", trimspace(var.alert_email)))
     error_message = "alert_email must be a valid e-mail address."
@@ -116,16 +115,6 @@ variable "log_retention_days" {
   }
 }
 
-variable "monthly_budget_usd" {
-  description = "Monthly AWS Budgets threshold for this environment's tagged resources. Notifications only - it does not stop spending."
-  type        = number
-  default     = 25
-  validation {
-    condition     = var.monthly_budget_usd >= 1 && var.monthly_budget_usd <= 200
-    error_message = "monthly_budget_usd must be between 1 and 200."
-  }
-}
-
 variable "cost_center" {
   description = "Cost-allocation tag value."
   type        = string
@@ -133,5 +122,56 @@ variable "cost_center" {
   validation {
     condition     = can(regex("^[A-Za-z0-9._-]{1,64}$", var.cost_center))
     error_message = "cost_center must be 1-64 characters of letters, digits, '.', '_' or '-'."
+  }
+}
+
+# ---------------------------------------------------------------------------------------------
+# Workload (Phase 4): one service per environment in the MVP, rendered from its validated manifest
+# by `scripts/validate_service.py --render <env> apps/<svc>/service.yaml` (CI writes it to a
+# -var-file; it is never hand-written).
+# ---------------------------------------------------------------------------------------------
+variable "service" {
+  description = "Effective service settings rendered from the validated service manifest."
+  type = object({
+    service_name   = string
+    owner          = string
+    environment    = string
+    container_port = number
+    cpu            = number
+    memory         = number
+    desired_count  = number
+    health_check = object({
+      path               = string
+      intervalSeconds    = number
+      healthyThreshold   = number
+      unhealthyThreshold = number
+    })
+    deployment = object({
+      strategy               = string
+      circuitBreakerRollback = bool
+      minimumHealthyPercent  = number
+      maximumPercent         = number
+    })
+    environment_variables = map(string)
+    secrets               = map(string) # env var -> Secrets Manager secret NAME (idp/<env>/<service>/<name>)
+    tags                  = map(string)
+  })
+  validation {
+    condition     = var.service.environment == var.environment
+    error_message = "The rendered service manifest is for a different environment."
+  }
+  validation {
+    condition     = alltrue([for name in values(var.service.secrets) : startswith(name, "${var.project}/${var.environment}/${var.service.service_name}/")])
+    error_message = "Secrets must live under <project>/<env>/<service>/."
+  }
+}
+
+variable "service_image" {
+  description = "Digest-pinned image to run. null = no ECS service yet (infrastructure only; Phase 5 publishes the first image)."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.service_image == null || can(regex("^[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$", var.service_image))
+    error_message = "service_image must be an ECR image referenced by digest (…@sha256:<64 hex>), never a tag."
   }
 }

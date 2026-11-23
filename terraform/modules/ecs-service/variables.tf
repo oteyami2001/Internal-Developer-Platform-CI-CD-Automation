@@ -1,24 +1,24 @@
-# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
-# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
-
-# MODULE CONTRACT (Phase 1 skeleton - resources are implemented in Phase 4)
+# One ECS Fargate service from a validated service manifest.
 #
-# Planned resources:
-#   aws_ecs_task_definition  (Fargate, awsvpc, non-root, read-only root FS, no privileged mode)
-#   aws_ecs_service          (rolling deploy, deployment circuit breaker + rollback, ALB target)
-#   aws_security_group       (task SG: ingress ONLY from the ALB SG on container_port)
-#   aws_cloudwatch_log_group (awslogs driver, bounded retention)
+# Hard-coded by design (no variable can turn them off): non-root user 10001, read-only root
+# filesystem, no privileged mode, no Linux capability additions, FARGATE launch type, awslogs.
 #
-# Hard-coded by design (not inputs): readonlyRootFilesystem = true, privileged = false,
-# user = "10001", launch type FARGATE, platform version LATEST. A service manifest cannot turn
-# them off because there is no variable to set.
+# Release ownership: Terraform creates the service and its first task definition. Later releases
+# are new task-definition revisions registered by app-deploy.yml (Phase 5), so the service ignores
+# task_definition changes made outside Terraform (lifecycle.ignore_changes).
 
 variable "name_prefix" {
-  type = string
+  description = "Environment prefix, e.g. idp-dev (role/family names must match the CI roles' idp-<env>-* scopes)."
+  type        = string
   validation {
     condition     = can(regex("^[a-z][a-z0-9-]{2,15}$", var.name_prefix))
     error_message = "name_prefix must be 3-16 lowercase characters."
   }
+}
+
+variable "environment" {
+  description = "Environment name, injected as APP_ENV."
+  type        = string
 }
 
 variable "service_name" {
@@ -39,8 +39,14 @@ variable "image" {
   }
 }
 
+variable "ecr_repository_arn" {
+  description = "The only repository the execution role may pull from."
+  type        = string
+}
+
 variable "cpu" {
-  type = number
+  description = "Fargate CPU units."
+  type        = number
   validation {
     condition     = contains([256, 512, 1024], var.cpu)
     error_message = "cpu must be 256, 512 or 1024."
@@ -48,7 +54,8 @@ variable "cpu" {
 }
 
 variable "memory" {
-  type = number
+  description = "Fargate memory (MiB), valid for the selected cpu."
+  type        = number
   validation {
     condition = contains(lookup({
       "256"  = [512, 1024, 2048]
@@ -60,7 +67,8 @@ variable "memory" {
 }
 
 variable "container_port" {
-  type = number
+  description = "Port the container listens on."
+  type        = number
   validation {
     condition     = var.container_port >= 1024 && var.container_port <= 65535
     error_message = "container_port must be an unprivileged port (1024-65535)."
@@ -68,7 +76,8 @@ variable "container_port" {
 }
 
 variable "desired_count" {
-  type = number
+  description = "Number of tasks."
+  type        = number
   validation {
     condition     = var.desired_count >= 0 && var.desired_count <= 6
     error_message = "desired_count must be between 0 and 6."
@@ -76,15 +85,22 @@ variable "desired_count" {
 }
 
 variable "cluster_arn" {
-  type = string
+  description = "ECS cluster."
+  type        = string
+}
+
+variable "vpc_id" {
+  description = "VPC of the task security group."
+  type        = string
 }
 
 variable "subnet_ids" {
-  type = list(string)
+  description = "Subnets for the tasks."
+  type        = list(string)
 }
 
 variable "assign_public_ip" {
-  description = "Dev cost mode only (no NAT Gateway). Production reference uses private subnets (false)."
+  description = "Dev cost mode only (no NAT Gateway, SE-1). The production reference uses private subnets (false)."
   type        = bool
   default     = false
 }
@@ -95,32 +111,28 @@ variable "alb_security_group_id" {
 }
 
 variable "target_group_arn" {
-  type = string
+  description = "ALB target group the service registers into."
+  type        = string
 }
 
-variable "execution_role_arn" {
-  type = string
-}
-
-variable "task_role_arn" {
-  type = string
-}
-
-variable "health_check" {
-  type = object({
-    path                = string
-    interval_seconds    = number
-    healthy_threshold   = number
-    unhealthy_threshold = number
-  })
+variable "permissions_boundary_arn" {
+  description = "Boundary both service roles must carry."
+  type        = string
 }
 
 variable "deployment" {
+  description = "From the manifest's spec.deployment."
   type = object({
     minimum_healthy_percent  = number
     maximum_percent          = number
     circuit_breaker_rollback = bool
   })
+}
+
+variable "health_check_grace_period_seconds" {
+  description = "Time ECS ignores failing ALB health checks after a task starts."
+  type        = number
+  default     = 30
 }
 
 variable "stop_timeout_seconds" {
@@ -140,7 +152,7 @@ variable "environment_variables" {
 }
 
 variable "secret_arns" {
-  description = "Env var name -> Secrets Manager ARN, scoped to idp/<env>/<service>/ by the platform."
+  description = "Env var name -> PARTIAL Secrets Manager ARN (without the 6-character suffix), scoped to idp/<env>/<service>/ by the platform."
   type        = map(string)
   default     = {}
   validation {
@@ -150,10 +162,12 @@ variable "secret_arns" {
 }
 
 variable "log_retention_days" {
-  type = number
+  description = "CloudWatch Logs retention for the service's log group."
+  type        = number
 }
 
-variable "tags" {
-  type    = map(string)
-  default = {}
+variable "wait_for_steady_state" {
+  description = "Make terraform apply wait until the deployment is healthy (deployment verification)."
+  type        = bool
+  default     = true
 }

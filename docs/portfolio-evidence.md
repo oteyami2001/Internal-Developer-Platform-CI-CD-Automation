@@ -3,6 +3,29 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Phase 4 — Dev infrastructure (code, 2026-11-23)
+
+Code and offline tests only. **Nothing is applied**: that needs the Phase 3 bootstrap in AWS
+and the owner's approval ([dev-deployment-runbook.md](dev-deployment-runbook.md)).
+
+| # | Check | Result |
+|---|---|---|
+| P4-1 | Module tests: network 4, load-balancer 3, ecs-cluster 2, ecs-service 10, observability 3 | ✅ 22/22 |
+| P4-2 | Stack guardrail tests (now with the full environment wiring) | ✅ 19/19; env data dev/staging/prod ✅ |
+| P4-3 | `scripts/tf_ci.sh` plan-digest gate (`test_tf_ci.py`) | ✅ 11/11 |
+| P4-4 | Mutation testing of the gate: digest comparison removed; plan-document check removed | ✅ both caught. A third check was proven unreachable (dead code) and removed |
+| P4-5 | Workflow hygiene: AWS jobs need a protected environment, `main` only, manual triggers, masked account ID; apply requires the digest; no plan artifact | ✅ 47 hygiene tests |
+| P4-6 | TFLint + AWS ruleset · Checkov · Trivy (all severities) · actionlint · zizmor · shellcheck | ✅ 0 issues · 0 failed (39 justified skips) · 0 findings · clean |
+
+**Defects found while building Phase 4 (and fixed):**
+
+| Defect | How it was found | Fix |
+|---|---|---|
+| **Fail-open digest gate:** if `terraform show -json` produced an empty document, both the reviewed plan and the apply would hash to the empty-input SHA-256 and match | A test of "drifted plan is refused" passed when it should have failed. The cause was a test-fixture path collision that emptied the plan JSON; it exposed that the script accepted it | `tf_ci.sh` refuses anything that is not a Terraform plan document (`format_version`); `test_fails_closed_on_a_non_plan_document` |
+| A test edit was silently not applied (the formatter had reflowed the target text), so the fixture still lacked `format_version` | Unexpected failures after the fix | Every scripted edit now asserts that its anchor matched |
+| The operator's home IP was written into the new runbook | Personal-data scan before commit | Replaced with a placeholder; new hygiene test fails on any public IPv4 CIDR in tracked files (proven to catch the address) |
+| Checkov secret heuristic flagged a test fixture named `DB_PASSWORD` (a secret *name*, not a value) | Checkov | Fixture renamed to `DB_DSN`; the scanner is not suppressed |
+
 ## Python version standard (2026-11-23, ADR 0006)
 
 Owner decision: stay on Python 3.13; Dependabot PR #2 (base image 3.13 → 3.15) is reverted.

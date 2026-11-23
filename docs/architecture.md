@@ -62,7 +62,7 @@ flowchart LR
 
 | Environment | Purpose | Deployment policy | Status |
 |---|---|---|---|
-| `dev` | Integration and demos | Approved deploy from `main`; short-lived (deploy for a demo, then approved cleanup) | 📋 deploy after Phase 4 approval |
+| `dev` | Integration and demos | Approved deploy from `main`; short-lived (deploy for a demo, then approved cleanup) | 🛠️✅ code ready ([dev-deployment-runbook.md](dev-deployment-runbook.md)) · ⏳ owner apply |
 | `staging` | Release validation, rollback rehearsal | Manual approval | 🛠️✅ Terraform data validated only |
 | `prod` | Production-style reference | Protected approval; HTTPS mandatory | 🛠️✅ Terraform data validated only |
 
@@ -112,14 +112,14 @@ and `backend.hcl`. Environments cannot drift structurally, because there is only
 
 | Module | Responsibility | Key guardrails (✅ = tested now) | Phase |
 |---|---|---|---|
-| `network` | VPC, 2–3 AZ public/private subnets, IGW, route tables, flow logs, locked-down default SG | `az_count` 2–3; no NAT in MVP | 4 |
-| `load-balancer` | ALB, ALB SG, target group, HTTP/HTTPS listeners | Ingress must be `/32` without HTTPS; ≥2 subnets; `drop_invalid_header_fields` | 4 |
-| `ecs-cluster` | Cluster, capacity providers | Container Insights off in dev (cost) | 4 |
-| `ecs-service` | Task definition, service, task SG, log group | ✅ image **must** be `ECR@sha256:` digest; ✅ valid Fargate size; ✅ unprivileged port; ✅ secrets only under `idp/`; ✅ stop timeout > app drain. Read-only root FS and non-root user are hard-coded, not inputs | 4–5 |
+| `network` | VPC, 2–3 AZ public/private subnets, IGW, route tables, flow logs (boundary-carrying role), locked-down default SG | ✅ No NAT; subnets never auto-assign public IPs; private route table has no default route; default SG has no rules | 🛠️✅ Phase 4 |
+| `load-balancer` | ALB, ALB SG, target group, HTTP/HTTPS listeners | ✅ Ingress must be `/32` without HTTPS (sensitive variable); HTTP→HTTPS redirect + TLS 1.3/1.2 policy with a certificate; egress only to the VPC; `drop_invalid_header_fields`, strictest desync mitigation | 🛠️✅ Phase 4 |
+| `ecs-cluster` | Cluster, capacity providers | ✅ Fargate only; Container Insights off in dev (cost), on in prod | 🛠️✅ Phase 4 |
+| `ecs-service` | Task definition, service, task SG, log group, execution + task roles | ✅ image **must** be `ECR@sha256:` digest; non-root, read-only root FS, all capabilities dropped (hard-coded); roles carry the boundary; execution role pulls only its repository; task role has no permissions; ingress only from the ALB SG; circuit breaker + rollback | 🛠️✅ Phase 4 |
 | `ecr` | Repositories, lifecycle and repository policies | ✅ Tag immutability + scan on push hard-coded; KMS; keep ≥3 images; **only the image-push role can push** (repository policy) | 🛠️✅ Phase 3 |
 | `iam-oidc` | plan / apply / deploy roles per environment + image-push role (the shared OIDC provider is looked up by the bootstrap) | ✅ Exact immutable `sub`, `aud` bound, **no `pull_request` trust**; plan role read-only except its `.tflock`; region-locked writes; boundary required for role creation; explicit deny on `aiops` resources, CI roles and audit settings | 🛠️✅ Phase 3 |
-| `security` | Workload permissions boundary per environment (ECS execution/task roles move to `ecs-service`, Phase 4) | ✅ Denies `iam:*`, Organizations, billing, CloudTrail tampering; secrets limited to `idp/<env>/*` | 🛠️✅ Phase 3 |
-| `observability` | SNS, alarms, dashboard, ECS deployment events | Bounded retention | 4, 7 |
+| `security` | Workload permissions boundary per environment (ECS execution/task roles live in `ecs-service`) | ✅ Denies `iam:*`, Organizations, billing, CloudTrail tampering; secrets limited to `idp/<env>/*` | 🛠️✅ Phase 3 |
+| `observability` | SNS + e-mail, alarms (ALB/target 5xx, p95 latency, unhealthy/no healthy targets, CPU, memory), ECS deployment events → SNS + log group, dashboard | ✅ Service alarms only once a service exists; publish restricted to this account | 🛠️✅ Phase 4 |
 | `budgets` | Monthly cost budget with actual and forecast alerts | ✅ Tag-filtered (`Project=idp`), 50/80/100% actual + 100% forecast | 🛠️✅ Phase 3 |
 
 Root configurations:
@@ -166,8 +166,8 @@ sequenceDiagram
 | Workflow | Trigger | AWS role / GitHub environment | Behaviour | Safeguards |
 |---|---|---|---|---|
 | `ci.yml` 🛠️ | `pull_request`, `push` to `main` | **none** | pytest + coverage gate, Ruff, Bandit, manifest validation, catalog check, `terraform fmt/validate/test` + per-env data tests, TFLint, Checkov (IaC, Dockerfile, Actions, secrets), Trivy (repo + image), actionlint, zizmor, shellcheck; `ci-ok` aggregates them | `permissions: {}` + per-job read, SHA-pinned actions, `pipefail`, read-only provider lock files, no credentials, safe for fork PRs; rules enforced by `test_repo_hygiene.py` |
-| `terraform-plan.yml` | `push` to `main`, `workflow_dispatch` | plan role / `dev-plan` | `init`, account + region check, `plan -out`, SHA-256 of plan, summary in job summary, plan uploaded as a short-retention artifact | Plan treated as sensitive (no `show` of values in logs), `-lock-timeout`, concurrency group per env |
-| `terraform-apply.yml` | `workflow_dispatch` (plan run id) | apply role / `dev` (required reviewer, `main` only) | Downloads **that** plan, verifies SHA-256 and commit SHA, applies it, records evidence | Never re-plans; stale plan fails; one apply at a time |
+| `terraform-plan.yml` 🛠️ | `workflow_dispatch` (main) | plan role / `dev-plan` | account check, manifest rendered to tfvars, `plan -detailed-exitcode`, **plan digest** (SHA-256 over every planned change) + reviewable summary | **No plan artifact** (a plan file holds plaintext variables; public repo); sensitive IP/e-mail redacted; account ID masked; concurrency group shared with apply |
+| `terraform-apply.yml` 🛠️ | `workflow_dispatch` (`plan_digest`, main) | apply role / `dev` (required reviewer, `main` only) | Re-plans with the same script, **refuses unless the digest equals the reviewed one**, applies that plan, publishes outputs | Fails closed (non-plan document, malformed digest, wrong account); any drift after review stops the apply; one plan/apply at a time |
 | `image-build.yml` | `push` to `main` (app paths), `workflow_dispatch` | image-push role / (branch `main` subject) | Build, smoke test (read-only FS, UID check), Trivy HIGH/CRITICAL gate, push, record `image@sha256` + SBOM | No `latest` tag, immutable repo, push only after scan passes |
 | `app-deploy.yml` | `workflow_dispatch` (service, env, digest) | deploy role / `dev-deploy` (required reviewer) | Render task definition from the validated manifest and digest, register it, update the service, wait for steady state, probe `/health`, write report | Digest must exist in ECR and have passed scan; circuit breaker rollback; never runs Terraform |
 | `drift-detection.yml` | `schedule` (weekly), `workflow_dispatch` | plan role / `dev-plan` | `plan -detailed-exitcode`; exit 2 opens or updates an issue with the summary | **Never applies** |
