@@ -3,6 +3,15 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Phase 8 — Validation and portfolio (2026-11-23)
+
+| # | Check | Evidence | Result |
+|---|---|---|---|
+| P8-1 | Scenario 3 on a real PR: demo PR #17 set the ECR repository's tags to `MUTABLE` | Run 45278084468: Terraform test `tags must be immutable` (expected `IMMUTABLE`, actual `MUTABLE`), Checkov `CKV_AWS_51` FAILED, Trivy misconfiguration FAILED, `ci-ok` red → merge blocked. Honest note: the first run (45277567552) failed the Terraform job at `terraform fmt` (the demo comment broke alignment); the formatting-only fix let the security test run. Closed unmerged; both commits reverted | ✅ |
+| P8-2 | Recruiter overview with measured numbers only ([portfolio-overview.md](portfolio-overview.md)), delivery-flow diagram ([diagrams/delivery-flow.mmd](../diagrams/delivery-flow.mmd)), refreshed architecture diagram | Counted at commit time: 241 platform tests, 27 service tests, 65 Terraform test runs, 8 workflows, 6 ADRs | ✅ |
+| P8-3 | Scenario 11: CloudWatch records deployment and application events | Owner screenshots of `/aws/events/idp-dev/ecs-deployments` and `/idp/dev/sample-api` | ⏳ |
+| P8-4 | Scenario 12: cleanup removes billable workload resources | `cleanup.yml` run (reviewed destroy, verified) | ⏳ on request |
+
 ## Phase 7 — Operations and recovery (code, 2026-11-23)
 
 Approved by the owner 2026-11-23. Code and offline tests. The AWS drills (circuit-breaker
@@ -389,14 +398,14 @@ explicit SCP deny. us-east-2: no ECS, ALB, NAT, EIP or secrets left; month-to-da
 
 | # | Scenario | Status |
 |---|---|---|
-| 1 | Developer creates a new service from a template | 📋 Phase 6 |
+| 1 | Developer creates a new service from a template | ✅ in CI on every PR: P6-1 (generated `orders-api` passes manifest, own tests 100% coverage, Ruff); PR #12 green |
 | 2 | PR triggers tests and security scans | ✅ PR #1, runs 45096890726 (caught a real failure) and 45097129693 (green) |
-| 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9, P2-9); 📋 on a GitHub PR |
+| 3 | Insecure Terraform change fails validation | ✅ on GitHub: demo PR #17 (ECR tags `MUTABLE`) blocked by Terraform test, Checkov `CKV_AWS_51` and Trivy (run 45278084468); closed unmerged, reverted (P8-1) |
 | 4 | Container image built and scanned | ✅ in CI on GitHub (run 45097129693, Trivy gate passed) |
 | 5 | Approved image published to ECR | ☁️ P5-A1, P5-A7b |
 | 6 | Authorized deployment updates ECS Fargate | ☁️ P5-A3 (first release), P5-A7, P5-A7c |
 | 7 | Unapproved deployment is blocked | ☁️ P5-A8 (rejected: job never started, no credentials) |
-| 8 | Application passes health checks | ✅ locally (E13); 📋 behind ALB |
+| 8 | Application passes health checks | ☁️ `/health` → `{"status":"ok"}` through the ALB (P5-A4); ALB `HealthyHostCount` 1 (P5-A5); every app-deploy verifies healthy targets (P5-A7, P5-A7c) |
 | 9 | Failing release is rolled back | ☁️ P7-A1 (circuit breaker, job failed as designed) |
 | 10 | Configuration drift detected | ☁️ P7-A2 (issue #15, nothing changed, restored via reviewed apply) |
 | 11 | CloudWatch records deployment and application events | 📋 Phase 4/7 (JSON logging ✅ E13) |

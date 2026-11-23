@@ -10,6 +10,7 @@ Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · C
 
 > **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 delivery pipeline ☁️ AWS-verified (2026-11-23): approved releases by digest, rejected release blocked. Phase 6 self-service 🛠️✅ (offline). Phase 7 operations ☁️ circuit-breaker rollback and drift drills verified (2026-11-23); cleanup on request.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
+> **Short on time? Read the [portfolio overview](docs/portfolio-overview.md) (3 minutes).**
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
 > Target: the AIOps project's AWS account in us-east-2, shared with that project's retained
 > resources ([ADR 0005](docs/adr/0005-shared-account-with-aiops-project.md)).
