@@ -3,6 +3,32 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Phase 5 — Delivery pipeline (code, 2026-11-23)
+
+Approved by the owner 2026-11-23. Code and offline tests only so far: **no image has been pushed
+and nothing has been deployed yet** ([release-runbook.md](release-runbook.md)).
+
+| # | Check | Result |
+|---|---|---|
+| P5-1 | `scripts/app_deploy.sh` (`test_app_deploy.py`, stubbed AWS CLI): digest-only input, refused before any AWS call otherwise; account guard; image must be in ECR; never creates a missing service; only the image changes in the new revision (hardened settings, roles and tags verified); circuit-breaker rollback, timeout, wrong PRIMARY and zero healthy targets each fail the job | ✅ 15/15 |
+| P5-2 | `scripts/push_image.sh` (`test_push_image.py`): immutable commit tag, digest published, a re-run never overwrites, registry password only via stdin | ✅ 4/4 |
+| P5-3 | `scripts/tf_ci.sh` additions: the initial image is composed from this account + the manifest and must be `sha256:<64 hex>`; a plan that deletes or replaces the running ECS service is refused (plan and apply); task-definition replacement still allowed | ✅ 12 new (23/23 total) |
+| P5-4 | Workflow rules: image pushed only after smoke test + Trivy gate (step order); image-build is the only AWS job without an environment (push to `main` only, push role); app-deploy requires a digest and `dev-deploy`; Terraform workflows pass only `SERVICE_IMAGE_DIGEST` | ✅ 5 new rules + 14 generic cases for the 2 new workflows |
+| P5-5 | Mutation testing: rollout state, PRIMARY check, target-health check, image-only change, service existence, digest format, service-delete guard each removed in turn | ✅ 7/7 caught |
+| P5-6 | Ruff · Bandit · actionlint · zizmor · shellcheck · Checkov `github_actions` + `secrets` | ✅ clean · Checkov 298 passed, 0 failed |
+
+**Defect found while building Phase 5 (and fixed):** the rollout timer started before the ECR and
+ECS checks, so on a slow runner the wait loop could end without polling even once. It showed up as
+a flaky timeout test. The timer now starts at `update-service`, and the loop always polls at
+least once.
+
+**Design decisions:**
+- The runner does not probe `/health`, because the ALB admits only the operator /32 (SE-2). Verification is the
+  deployment's own `rolloutState` (not "services-stable", which also passes after a rollback),
+  the PRIMARY revision, and ALB target health, which probes `/health`.
+- ECR's scan on push is reported, not gated: it also lists vulnerabilities with no fix yet. The
+  gate is Trivy before the push.
+
 ## Phase 4 — Dev infrastructure (2026-11-23)
 
 ### AWS apply (☁️ AWS-verified)
@@ -275,9 +301,9 @@ explicit SCP deny. us-east-2: no ECS, ALB, NAT, EIP or secrets left; month-to-da
 | 2 | PR triggers tests and security scans | ✅ PR #1, runs 45096890726 (caught a real failure) and 45097129693 (green) |
 | 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9, P2-9); 📋 on a GitHub PR |
 | 4 | Container image built and scanned | ✅ in CI on GitHub (run 45097129693, Trivy gate passed) |
-| 5 | Approved image published to ECR | 📋 Phase 5 |
-| 6 | Authorized deployment updates ECS Fargate | 📋 Phase 5 |
-| 7 | Unapproved deployment is blocked | 📋 Phase 5 |
+| 5 | Approved image published to ECR | 🛠️✅ Phase 5 code · ⏳ first run |
+| 6 | Authorized deployment updates ECS Fargate | 🛠️✅ Phase 5 code · ⏳ first run |
+| 7 | Unapproved deployment is blocked | 🛠️ `dev-deploy` reviewer + OIDC trust · ⏳ evidence |
 | 8 | Application passes health checks | ✅ locally (E13); 📋 behind ALB |
 | 9 | Failing release is rolled back | 📋 Phase 7 |
 | 10 | Configuration drift detected | 📋 Phase 7 |

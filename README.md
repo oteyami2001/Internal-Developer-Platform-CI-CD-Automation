@@ -8,7 +8,7 @@ networking or arbitrary AWS resources.
 **Stack:** AWS (ECS Fargate, ECR, ALB, VPC, IAM, CloudWatch, SNS, Budgets) · Terraform · GitHub
 Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
 
-> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Next: Phase 5 (image build and deploy), awaiting approval.**
+> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 (image build and deploy) approved: code and tests done, first release pending.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
 > Target: the AIOps project's AWS account in us-east-2, shared with that project's retained
@@ -24,10 +24,11 @@ Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · C
 | Generated service catalog with staleness check | 🛠️✅ |
 | Terraform: single environment stack + dev/staging/prod data, account and region guards (us-east-2 only), ingress/HTTPS/retention/budget validation | 🛠️✅ 15 `terraform test` runs (mocked AWS) |
 | Bootstrap (Phase 3): state bucket, CloudTrail, 4 OIDC roles, permissions boundary, ECR, budget; modules `iam-oidc`, `security`, `ecr`, `budgets` implemented | 🛠️✅ 23 `terraform test` runs + 10/10 mutations caught · ⏳ owner applies via [bootstrap-runbook.md](docs/bootstrap-runbook.md) |
-| Dev environment (Phase 4): network, ALB, ECS cluster/service, observability; `terraform-plan` / `terraform-apply` with a reviewed-plan **digest gate** | 🛠️✅ 41 module/stack tests, 11 gate tests (mutation-tested) · ⏳ owner approval and apply ([runbook](docs/dev-deployment-runbook.md)) |
+| Dev environment (Phase 4): network, ALB, ECS cluster, observability; `terraform-plan` / `terraform-apply` with a reviewed-plan **digest gate** | 🛠️✅ 41 module/stack tests, 23 gate tests (mutation-tested) · ☁️ 37 resources applied, no drift ([evidence](docs/portfolio-evidence.md)) |
+| Delivery (Phase 5): `image-build` (smoke, Trivy gate, SBOM, immutable tag, digest) and `app-deploy` (approval, digest only, image-only revision, rollout + health verification); Terraform refuses to delete the running service | 🛠️✅ 36 new script/workflow tests, 7/7 mutations caught · ⏳ first release ([runbook](docs/release-runbook.md)) |
 | `ci.yml`: pytest, Ruff, Bandit, manifests, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov (IaC, Dockerfile, Actions, secrets), Trivy (repo + image), actionlint, zizmor, shellcheck; one `ci-ok` gate | ✅ green on GitHub ([PR #1](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/pull/1)) |
 | Workflow security rules as tests (SHA pins, least privilege, no OIDC in CI, no `pull_request_target`, no expression injection) | 🛠️✅ 23 tests |
-| Deployment workflows, OIDC roles, ECR, ECS deployment, monitoring, rollback, drift, cleanup | 📋 Phases 3–7 |
+| Developer self-service, drift detection, cleanup, rollback drills | 📋 Phases 6–7 |
 
 ## Architecture
 
@@ -53,7 +54,7 @@ apps/sample-api/          FastAPI reference workload (app, tests, Dockerfile, se
 platform/schemas/         service.schema.json - the developer contract
 platform/policy/          platform-policy.yaml - platform-owned guardrails
 platform/catalog/         services.yaml - GENERATED service catalog
-scripts/                  validate_service.py, generate_catalog.py, aws_discovery.sh (read-only)
+scripts/                  manifest tools, tf_ci.sh (plan/apply gate), push_image.sh, app_deploy.sh, verifiers
 terraform/bootstrap/      account foundation (state, OIDC roles, ECR, budget) - Phase 3
 terraform/stack/          the single environment root module (+ guardrail tests)
 terraform/envs/<env>/     per-environment data: terraform.tfvars, backend.hcl.example
@@ -97,6 +98,7 @@ validation, catalog check, `terraform fmt/validate/test`, environment-data tests
 | [aws-discovery-2026-11-23.md](docs/aws-discovery-2026-11-23.md) | Live AWS account discovery (redacted) and its Phase 3 impact |
 | [bootstrap-runbook.md](docs/bootstrap-runbook.md) | Step-by-step bootstrap from AWS CloudShell, verification, GitHub environments |
 | [dev-deployment-runbook.md](docs/dev-deployment-runbook.md) | Phase 4: plan, review, digest-gated apply, verification |
+| [release-runbook.md](docs/release-runbook.md) | Phase 5: publish an image, first release via Terraform, approved deploys, rollback |
 | [github-settings.md](docs/github-settings.md) | Branch ruleset, secret scanning, Actions defaults: apply + verify |
 | [docs/adr/](docs/adr) | Architecture decision records |
 

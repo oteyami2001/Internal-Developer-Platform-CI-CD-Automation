@@ -37,7 +37,7 @@ jobs:
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       ALLOWED_INGRESS_CIDR: ${{ vars.ALLOWED_INGRESS_CIDR }}
-      SERVICE_IMAGE: ${{ vars.SERVICE_IMAGE }}
+      SERVICE_IMAGE_DIGEST: ${{ vars.SERVICE_IMAGE_DIGEST }}
       TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
