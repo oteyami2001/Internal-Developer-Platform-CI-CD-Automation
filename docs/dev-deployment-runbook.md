@@ -19,11 +19,13 @@ In the Codespace, signed in as yourself (`unset GITHUB_TOKEN && gh auth login`):
 ALLOWED_INGRESS_CIDR=<your-ip>/32 scripts/configure_github_environments.sh <aws_account_id> <alert_email>
 ```
 
-It is idempotent: it re-applies the environments and adds `ALLOWED_INGRESS_CIDR` and `ALERT_EMAIL`
-to both `dev-plan` and `dev`. Check:
+It is idempotent. It re-applies the environments and stores `ALLOWED_INGRESS_CIDR`, `ALERT_EMAIL`,
+the role ARNs and the state bucket name as **secrets**. GitHub masks secrets in logs, but it prints
+variables in clear text, and this repository's logs are public. It also deletes the old variables
+that held those values. Check (names only, values are never shown):
 
 ```bash
-gh variable list --repo oteyami2001/Internal-Developer-Platform-CI-CD-Automation --env dev-plan
+gh secret list --repo oteyami2001/Internal-Developer-Platform-CI-CD-Automation --env dev-plan
 ```
 
 Home IP addresses change. Before a demo, compare with `curl -s https://checkip.amazonaws.com` and

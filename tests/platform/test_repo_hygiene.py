@@ -258,7 +258,7 @@ def test_image_is_pushed_only_after_smoke_test_and_trivy_gate():
     gate = next(i for i, s in enumerate(job["steps"]) if s.get("with", {}).get("exit-code") == "1")
     assert smoke < creds and gate < creds, "no AWS credentials before the image passed its gates"
     assert job["steps"][gate]["with"]["severity"] == "HIGH,CRITICAL"
-    assert job["steps"][creds]["with"]["role-to-assume"] == "${{ vars.AWS_IMAGE_PUSH_ROLE_ARN }}"
+    assert job["steps"][creds]["with"]["role-to-assume"] == "${{ secrets.AWS_IMAGE_PUSH_ROLE_ARN }}"
     assert any(s.get("run") == "scripts/push_image.sh" for s in job["steps"][creds:])
 
 
@@ -276,6 +276,24 @@ def test_terraform_workflows_pass_the_initial_image_digest_only():
         env = next(iter(load_workflow(ROOT / ".github" / "workflows" / name)["jobs"].values()))["env"]
         assert env["SERVICE_IMAGE_DIGEST"] == "${{ vars.SERVICE_IMAGE_DIGEST }}", name
         assert "SERVICE_IMAGE" not in env, name
+
+
+# GitHub prints `vars.*` in clear text in public logs (every step echoes the job env). Found in
+# Phase 5: the operator's IP and the account ID (role ARNs, bucket name) were visible in run logs.
+PUBLIC_VARIABLES = {"AWS_REGION", "SERVICE_IMAGE_DIGEST"}
+
+
+@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
+def test_only_non_identifying_values_are_variables(path):
+    used = set(re.findall(r"\$\{\{\s*vars\.([A-Za-z0-9_]+)", path.read_text(encoding="utf-8")))
+    assert used <= PUBLIC_VARIABLES, f"{path.name}: {sorted(used - PUBLIC_VARIABLES)} must be secrets (masked in logs)"
+
+
+def test_configuration_script_stores_identifying_values_as_secrets():
+    script = (ROOT / "scripts" / "configure_github_environments.sh").read_text(encoding="utf-8")
+    assert set(re.findall(r"^gh variable set (\w+)", script, re.M)) <= PUBLIC_VARIABLES
+    for name in ("AWS_ROLE_ARN", "TF_STATE_BUCKET", "AWS_IMAGE_PUSH_ROLE_ARN", "ALLOWED_INGRESS_CIDR", "ALERT_EMAIL"):
+        assert re.search(rf"^\s*gh secret set {name}\b", script, re.M), name
 
 
 CIDR = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})/\d{1,2}(?![\d.])")

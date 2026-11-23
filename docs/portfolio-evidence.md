@@ -22,6 +22,15 @@ ECS checks, so on a slow runner the wait loop could end without polling even onc
 a flaky timeout test. The timer now starts at `update-service`, and the loop always polls at
 least once.
 
+**Defect found in AWS (and fixed): identifying values in public logs.** Reading the first
+service plan log (run 45127566917) showed the operator's IP (`ALLOWED_INGRESS_CIDR`) and the
+account ID (role ARNs, state bucket) in clear text. They were GitHub *variables*, and every step
+echoes the job's `env`. `mask-aws-account-id` only masks after the credentials step. The Phase 4
+plan/apply logs had the same problem. Fix: these values are now *secrets*, which GitHub masks from
+the first line. The configuration script deletes the old variables. A hygiene test allows only
+`AWS_REGION` and `SERVICE_IMAGE_DIGEST` as variables, and it fails if the IP is moved back.
+Earlier run logs are deleted with the owner's approval.
+
 **Design decisions:**
 - The runner does not probe `/health`, because the ALB admits only the operator /32 (SE-2). Verification is the
   deployment's own `rolloutState` (not "services-stable", which also passes after a rollback),

@@ -42,7 +42,7 @@ jobs:
       id-token: write # OIDC: the deploy role trusts only environment:dev-deploy
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
-      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
       IMAGE_DIGEST: ${{ inputs.image_digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,7 +55,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check jsonschema==4.26.0 PyYAML==6.0.3
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: idp-dev-deploy-${{ github.run_id }}
           mask-aws-account-id: true

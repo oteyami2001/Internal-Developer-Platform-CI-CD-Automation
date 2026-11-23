@@ -55,7 +55,7 @@ existing budgets and CloudTrail trails.
 | 1 | **Target AWS account** | ✅ **Decided 2026-11-23:** reuse the AIOps project's account and keep all of its resources ([ADR 0005](adr/0005-shared-account-with-aiops-project.md)) |
 | 2 | **Target Region** | ✅ **us-east-2** (only approved Region in code; us-east-1 is SCP-denied in this account) |
 | 3 | **Budgets** | ✅ account-wide: keep the existing `aiops-account-monthly` ($30) · ✅ project budget `idp-project-monthly` $25 (decided 2026-11-23) |
-| 4 | **Alert e-mail** and **operator `/32`** | ✅ both provided, stored as GitHub environment secret/variable (never committed); the /32 must also be set on `dev-plan` ([dev-deployment-runbook.md §0](dev-deployment-runbook.md)) |
+| 4 | **Alert e-mail** and **operator `/32`** | ✅ both provided, stored as GitHub environment secrets (never committed; masked in logs); the /32 must also be set on `dev-plan` ([dev-deployment-runbook.md §0](dev-deployment-runbook.md)) |
 | 5 | **HTTPS for the demo?** | ❓ open. A Route 53 domain + ACM certificate removes exception SE-2 |
 | 6 | **CloudTrail trail** (none exists) | ✅ **Decided 2026-11-23:** add a single-Region management-events trail in the bootstrap |
 | 7 | **Where to run the bootstrap** | ✅ AWS CloudShell us-east-2 as the existing admin role (no local keys) |

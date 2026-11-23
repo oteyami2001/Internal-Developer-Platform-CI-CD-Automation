@@ -75,7 +75,7 @@ jobs:
           if-no-files-found: error
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_IMAGE_PUSH_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_IMAGE_PUSH_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: idp-image-push-${{ github.run_id }}
           mask-aws-account-id: true
