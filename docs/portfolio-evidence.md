@@ -3,10 +3,25 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
-## Phase 4 — Dev infrastructure (code, 2026-11-23)
+## Phase 4 — Dev infrastructure (2026-11-23)
 
-Code and offline tests only. **Nothing is applied**: that needs the Phase 3 bootstrap in AWS
-and the owner's approval ([dev-deployment-runbook.md](dev-deployment-runbook.md)).
+### AWS apply (☁️ AWS-verified)
+
+Run through GitHub Actions with OIDC from `main`; the apply was approved by the owner in the `dev`
+environment. Account ID masked in the logs.
+
+| # | Step | Evidence | Result |
+|---|---|---|---|
+| P4-A1 | `terraform-plan` run [45120116740](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45120116740) | `Plan: 37 to add, 0 to change, 0 to destroy.` Matches the expected count (network 18, load balancer 4, cluster 2, observability 13; no service, because no image exists yet) | ✅ |
+| P4-A2 | `terraform-apply` run [45121248014](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45121248014), 06:02–06:05 | Reviewed digest `76bb2470…a76ee` re-computed and matched; `Apply complete! Resources: 37 added, 0 changed, 0 destroyed.` | ✅ |
+| P4-A3 | Outputs | ALB `idp-dev-216884465.us-east-2.elb.amazonaws.com`, cluster and dashboard `idp-dev`, log group `/aws/events/idp-dev/ecs-deployments`, `service_deployed = false` | ✅ |
+| P4-A4 | SNS alert subscription | Confirmed by the owner from the e-mail | ✅ |
+| P4-A5 | Drift check: `terraform-plan` run [45121998148](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45121998148), 06:07:32–06:07:52 | `No changes. Your infrastructure matches the configuration.` | ✅ |
+| P4-A6 | ALB reachability from the sandbox (not the allowed /32) | Connection timed out. Consistent with the security group, but **not proof** of correct behaviour | ⚠️ inconclusive |
+| P4-A6b | CloudWatch alarms in the console (owner screenshot, ~06:12) | 4 alarms (`idp-dev-latency-p95`, `-target-5xx`, `-alb-5xx`, `-unhealthy-targets`): all `OK`, 0 in alarm, 0 insufficient data | ✅ |
+| P4-A7 | ALB from the operator's IP (expected HTTP `503`: no targets until Phase 5) | Not yet recorded | ⏳ |
+
+### Code and offline tests
 
 | # | Check | Result |
 |---|---|---|

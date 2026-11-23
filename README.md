@@ -8,7 +8,7 @@ networking or arbitrary AWS resources.
 **Stack:** AWS (ECS Fargate, ECR, ALB, VPC, IAM, CloudWatch, SNS, Budgets) · Terraform · GitHub
 Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
 
-> **Project status: Phase 3 bootstrap ☁️ AWS-verified (2026-11-23). Phase 4 (dev infrastructure) approved; first plan in progress.**
+> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Next: Phase 5 (image build and deploy), awaiting approval.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
 > Target: the AIOps project's AWS account in us-east-2, shared with that project's retained
