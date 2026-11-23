@@ -37,7 +37,9 @@ case "$1" in
   init) exit 0 ;;
   plan)
     printf %s "${TF_VAR_service_image:-}" >"$STUB_DIR/service_image"
-    echo "Plan: 2 to add, 0 to change, 0 to destroy."; exit 2 ;;
+    echo "$*" >"$STUB_DIR/plan_args"
+    echo "Plan: 2 to add, 0 to change, 0 to destroy."; exit "${STUB_PLAN_RC:-2}" ;;
+  state) printf '%s' "${STUB_STATE:-}" ;;
   show) cat "$STUB_PLAN_JSON" ;;
   apply) touch "$STUB_DIR/applied"; echo "Apply complete! Resources: 2 added, 0 changed, 0 destroyed." ;;
   output) echo 'service_url = "http://idp-dev.example"'; echo 'account_id = "111111111111"' ;;
@@ -47,6 +49,7 @@ esac
 
 AWS_STUB = """#!/usr/bin/env bash
 [ "$1 $2" = "sts get-caller-identity" ] && echo "$STUB_CALLER_ACCOUNT" && exit 0
+[ "$1 $2" = "elbv2 describe-load-balancers" ] && exit "${STUB_ELB_RC:-254}"
 exit 1
 """
 
@@ -83,6 +86,7 @@ def stub(tmp_path):
             "TF_VAR_alert_email": "alerts@example.com",
             **overrides,
         }
+        env = {k: v for k, v in env.items() if v is not None}
         return subprocess.run(["bash", str(SCRIPT), cmd, "dev"], env=env, capture_output=True, text=True, check=False)  # noqa: S603, S607
 
     run.dir = tmp_path
@@ -222,3 +226,84 @@ def test_refuses_a_plan_that_deletes_the_running_service(stub, actions):
 )
 def test_allows_creating_updating_and_new_task_definitions(stub, address, actions):
     assert stub("plan", plan=_with_change(address, actions)).returncode == 0
+
+
+# --- Drift detection (Phase 7): reported, never fixed --------------------------------------------
+def test_drift_reports_nothing_when_infrastructure_matches(stub):
+    result = stub("drift", STUB_PLAN_RC="0")
+    assert result.returncode == 0, result.stdout
+    assert "No drift" in result.stdout
+    assert not (stub.dir / "drift.md").exists()
+
+
+def test_drift_is_reported_with_addresses_only_and_never_applied(stub):
+    result = stub("drift")
+    assert result.returncode == 3, result.stdout
+    report = (stub.dir / "drift.md").read_text()
+    assert "`module.network.aws_vpc.this`" in report and "| create |" in report
+    assert "10.40.0.0/20" not in report  # no values: the report becomes a public issue
+    assert not (stub.dir / "applied").exists()
+
+
+def test_drift_never_runs_in_destroy_mode(stub):
+    assert stub("drift", TF_MODE="destroy").returncode == 2
+
+
+# --- Cleanup (Phase 7): reviewed destroy, verified -------------------------------------------------
+DESTROY = {"TF_MODE": "destroy", "CONFIRM_DESTROY": "destroy-dev"}
+DELETE_ALL = {
+    "format_version": "1.2",
+    "resource_changes": [
+        {"address": a, "change": {"actions": ["delete"], "after": None, "after_unknown": {}}}
+        for a in ("module.service[0].aws_ecs_service.this", "module.load_balancer.aws_lb.this")
+    ],
+}
+
+
+def destroy_digest(stub) -> str:
+    result = stub("plan", plan=DELETE_ALL, TF_MODE="destroy")
+    assert result.returncode == 0, result.stdout
+    assert "-destroy" in (stub.dir / "plan_args").read_text()
+    assert "run **cleanup**" in (stub.dir / "summary.md").read_text()
+    return (stub.dir / "output").read_text().strip().split("digest=")[-1]
+
+
+def test_destroy_plan_is_allowed_to_remove_the_service(stub):
+    assert len(destroy_digest(stub)) == 64  # the "never delete the service" guard is for normal plans only
+
+
+def test_cleanup_destroys_the_reviewed_plan_and_verifies_nothing_is_left(stub):
+    digest = destroy_digest(stub)
+    result = stub("apply", plan=DELETE_ALL, EXPECTED_DIGEST=digest, **DESTROY)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (stub.dir / "applied").exists()
+    assert "Cleanup verified" in (stub.dir / "summary.md").read_text()
+
+
+def test_cleanup_needs_the_typed_confirmation(stub):
+    digest = destroy_digest(stub)
+    result = stub("apply", plan=DELETE_ALL, EXPECTED_DIGEST=digest, TF_MODE="destroy", CONFIRM_DESTROY="yes")
+    assert result.returncode == 2 and "CONFIRM_DESTROY=destroy-dev" in result.stdout
+    assert not (stub.dir / "applied").exists()
+
+
+@pytest.mark.parametrize(
+    ("leftover", "message"),
+    [
+        ({"STUB_STATE": "module.network.aws_vpc.this\n"}, "still in state"),
+        ({"STUB_ELB_RC": "0"}, "load balancer idp-dev still exists"),
+    ],
+)
+def test_cleanup_fails_if_anything_is_left(stub, leftover, message):
+    digest = destroy_digest(stub)
+    result = stub("apply", plan=DELETE_ALL, EXPECTED_DIGEST=digest, **DESTROY, **leftover)
+    assert result.returncode == 1 and message in result.stdout
+
+
+def test_destroy_and_apply_digests_are_not_interchangeable(stub):
+    """The same plan document hashes differently per mode: a reviewed destroy can never be applied
+    as a normal apply, and a reviewed apply can never authorise a destroy."""
+    apply_digest = plan_digest(stub)
+    result = stub("apply", TF_MODE="destroy", CONFIRM_DESTROY="destroy-dev", EXPECTED_DIGEST=apply_digest)
+    assert result.returncode == 1 and "Refusing to apply" in result.stdout
+    assert not (stub.dir / "applied").exists()

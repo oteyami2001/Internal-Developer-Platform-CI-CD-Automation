@@ -5,10 +5,19 @@
 #   - Publishes a reviewable summary and a PLAN DIGEST. Nothing sensitive is uploaded: the plan
 #     file itself is never stored (public repository; see scripts/tf_ci.sh).
 #   - To apply: run terraform-apply.yml with that digest, and approve the `dev` environment.
+#   - mode = destroy plans the removal of the environment for cleanup.yml (Phase 7). Same read-only
+#     role; the digest covers the mode, so it can only be used by cleanup.yml.
 name: terraform-plan
 
+# checkov:skip=CKV_GHA_7:mode only selects what is PLANNED (read-only role); applying still needs the reviewed digest and an approval.
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: apply = normal plan; destroy = plan the removal of dev (for cleanup)
+        type: choice
+        options: [apply, destroy]
+        default: apply
 
 permissions: {}
 
@@ -39,6 +48,7 @@ jobs:
       ALLOWED_INGRESS_CIDR: ${{ secrets.ALLOWED_INGRESS_CIDR }}
       SERVICE_IMAGE_DIGEST: ${{ vars.SERVICE_IMAGE_DIGEST }}
       TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+      TF_MODE: ${{ inputs.mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

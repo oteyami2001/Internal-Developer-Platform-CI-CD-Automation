@@ -3,6 +3,24 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Phase 7 — Operations and recovery (code, 2026-11-23)
+
+Approved by the owner 2026-11-23. Code and offline tests. The AWS drills (circuit-breaker
+rollback, manual drift, cleanup) follow, each recorded below when run.
+
+| # | Check | Result |
+|---|---|---|
+| P7-1 | `tf_ci.sh drift`: no drift → exit 0; drift → exit 3 + report with resource addresses and actions only (a planned value is verified absent); never applies; refused in destroy mode | ✅ 3 tests |
+| P7-2 | `TF_MODE=destroy`: `plan -destroy` is passed; the "never delete the service" guard applies to normal plans only; destroy needs `CONFIRM_DESTROY=destroy-dev`; after destroying, the state must be empty and the `idp-dev` load balancer gone, or the job fails | ✅ 5 tests |
+| P7-3 | Digest bound to the mode: the same plan document gives different digests for apply and destroy, so a reviewed apply never authorises a destroy and vice versa | ✅ |
+| P7-4 | `report_drift.sh`: one open `drift` issue per environment, later runs comment on it; unknown environment or missing report refused | ✅ 3 tests (gh stubbed) |
+| P7-5 | Workflow rules: drift detection is read-only (`dev-plan`, `tf_ci.sh drift`, never apply/TF_MODE); only cleanup and terraform-plan may set `TF_MODE`; cleanup requires digest + typed confirmation + `dev` approval; the drill image is proven to crash and scanned before any credentials, and contains no application code | ✅ 4 rules |
+| P7-6 | Mutation testing: drift falls through, mode not in digest, confirmation not checked, leftover state not verified, leftover load balancer not verified, service guard disabled, duplicate drift issues | ✅ 7/7 caught |
+| P7-7 | Lint and scans: Ruff, Bandit, actionlint, zizmor, shellcheck, Checkov (dockerfile 175 passed, github_actions 408 passed, 0 failed) | ✅ |
+| P7-A1 | Circuit-breaker drill in AWS | ⏳ |
+| P7-A2 | Manual drift detected and reported (issue), not fixed | ⏳ |
+| P7-A3 | Cleanup verified | ⏳ (on request: it removes the running environment) |
+
 ## Phase 6 — Self-service (code, 2026-11-23)
 
 Approved by the owner 2026-11-23. Offline only: Phase 6 creates no AWS resources.

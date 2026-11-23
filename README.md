@@ -8,7 +8,7 @@ networking or arbitrary AWS resources.
 **Stack:** AWS (ECS Fargate, ECR, ALB, VPC, IAM, CloudWatch, SNS, Budgets) · Terraform · GitHub
 Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
 
-> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 delivery pipeline ☁️ AWS-verified (2026-11-23): approved releases by digest, rejected release blocked. Phase 6 self-service 🛠️✅ (offline).**
+> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 delivery pipeline ☁️ AWS-verified (2026-11-23): approved releases by digest, rejected release blocked. Phase 6 self-service 🛠️✅ (offline). Phase 7 operations 🛠️✅ code + tests; AWS drills next.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
 > Target: the AIOps project's AWS account in us-east-2, shared with that project's retained
@@ -29,7 +29,7 @@ Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · C
 | `ci.yml`: pytest, Ruff, Bandit, manifests, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov (IaC, Dockerfile, Actions, secrets), Trivy (repo + image), actionlint, zizmor, shellcheck; one `ci-ok` gate | ✅ green on GitHub ([PR #1](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/pull/1)) |
 | Workflow security rules as tests (SHA pins, least privilege, no OIDC in CI, no `pull_request_target`, no expression injection) | 🛠️✅ 23 tests |
 | Self-service (Phase 6): `scripts/new_service.py` creates a service from the golden-path template that passes CI unchanged; generated [service catalog](docs/service-catalog.md); deploy-request issue form | 🛠️✅ 17 tests (generated service: manifest, own tests 90% coverage, Ruff), template ≡ reference service, 5/5 mutations caught |
-| Drift detection, cleanup, rollback drills | 📋 Phase 7 |
+| Operations (Phase 7): weekly drift detection (reports via issue, never fixes), reviewed + verified cleanup (destroy digest bound to the mode), circuit-breaker drill image | 🛠️✅ 9 drift/cleanup tests, 3 drift-issue tests, 4 workflow rules, 7/7 mutations caught · ⏳ AWS drills ([runbook](docs/rollback-runbook.md)) |
 
 ## Architecture
 

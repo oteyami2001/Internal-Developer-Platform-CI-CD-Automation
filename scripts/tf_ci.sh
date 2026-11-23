@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# Terraform plan/apply for one environment, as run by terraform-plan.yml and terraform-apply.yml.
-# Both workflows call THIS script, so the apply re-creates the plan exactly the way the reviewed
-# plan was created.
+# Terraform plan/apply for one environment, as run by terraform-plan.yml, terraform-apply.yml,
+# drift-detection.yml and cleanup.yml. Every workflow calls THIS script, so an apply re-creates the
+# plan exactly the way the reviewed plan was created.
 #
 #   tf_ci.sh plan  <env>   plan, print a reviewable summary and the PLAN DIGEST
 #   tf_ci.sh apply <env>   re-plan; refuse unless the digest equals $EXPECTED_DIGEST; apply that plan
+#   tf_ci.sh drift <env>   plan only; exit 3 and write $RUNNER_TEMP/drift.md if real infrastructure
+#                          differs from the code. Never applies (drift is reported, not fixed).
+#
+# TF_MODE=destroy (cleanup): `plan` plans the removal of the whole environment stack, `apply`
+# destroys exactly that reviewed plan and then VERIFIES nothing is left. Destroy additionally needs
+# CONFIRM_DESTROY=destroy-<env>. The digest covers the mode, so a reviewed destroy digest can never
+# be used for a normal apply, nor the reverse. Bootstrap resources (state, CI roles, ECR, budget)
+# are in a different configuration and are never touched.
 #
 # Why a digest instead of uploading the plan file: this repository is public, and a plan file
 # contains the plaintext values of every variable (alert e-mail, operator IP) and state data.
@@ -31,7 +39,16 @@ WORK=${RUNNER_TEMP:-$(mktemp -d)}
 SUMMARY=${GITHUB_STEP_SUMMARY:-/dev/stdout}
 
 case "$ENV" in dev | staging | prod) ;; *) echo "unknown environment: $ENV" >&2; exit 2 ;; esac
-case "$CMD" in plan | apply) ;; *) echo "unknown command: $CMD" >&2; exit 2 ;; esac
+case "$CMD" in plan | apply | drift) ;; *) echo "unknown command: $CMD" >&2; exit 2 ;; esac
+MODE=${TF_MODE:-apply}
+case "$MODE" in apply | destroy) ;; *) echo "TF_MODE must be apply or destroy" >&2; exit 2 ;; esac
+if [ "$MODE" = destroy ] && [ "$CMD" = drift ]; then echo "drift detection never runs in destroy mode" >&2; exit 2; fi
+if [ "$MODE" = destroy ] && [ "$CMD" = apply ] && [ "${CONFIRM_DESTROY:-}" != "destroy-$ENV" ]; then
+  echo "::error::Destroying $ENV needs CONFIRM_DESTROY=destroy-$ENV (typed in the cleanup workflow)"
+  exit 2
+fi
+PLAN_FLAGS=()
+if [ "$MODE" = destroy ]; then PLAN_FLAGS=(-destroy); fi
 for v in AWS_ROLE_ARN AWS_REGION TF_STATE_BUCKET ALLOWED_INGRESS_CIDR TF_VAR_alert_email; do
   [ -n "${!v:-}" ] || { echo "::error::$v is not set (configure the GitHub environment, docs/dev-deployment-runbook.md)"; exit 2; }
 done
@@ -65,7 +82,7 @@ terraform -chdir="$STACK" init -input=false -lockfile=readonly -no-color \
   -backend-config="use_lockfile=true" >/dev/null
 
 set +e
-terraform -chdir="$STACK" plan -input=false -no-color -lock-timeout=5m -detailed-exitcode \
+terraform -chdir="$STACK" plan "${PLAN_FLAGS[@]}" -input=false -no-color -lock-timeout=5m -detailed-exitcode \
   -var-file="../envs/$ENV/terraform.tfvars" -var-file="$WORK/service.tfvars.json" \
   -out="$WORK/tfplan" >"$WORK/plan.txt"
 rc=$?
@@ -84,19 +101,24 @@ if ! jq -e 'type == "object" and has("format_version")' "$WORK/plan.json" >/dev/
   exit 1
 fi
 # Never delete the running service as a side effect (see header). Replacing it is a delete too.
-if jq -e '[.resource_changes[]? | select((.address | test("^module\\.service\\[[0-9]+\\]\\.aws_ecs_service\\."))
+# Only the reviewed, confirmed cleanup (TF_MODE=destroy) may remove it.
+if [ "$MODE" != destroy ] && jq -e '[.resource_changes[]? | select((.address | test("^module\\.service\\[[0-9]+\\]\\.aws_ecs_service\\."))
     and (.change.actions | index("delete")))] | length > 0' "$WORK/plan.json" >/dev/null; then
   echo "::error::Refusing: this plan would DELETE the running ECS service. If SERVICE_IMAGE_DIGEST was removed or emptied, set it back. Removing an environment is done by the cleanup workflow, not by a plan side effect."
   exit 1
 fi
-# Canonical, order-independent description of every change; hashed, never published in clear.
-DIGEST=$(jq -S -c '[.resource_changes[]? | select(.change.actions != ["no-op"])
-  | {address, actions: .change.actions, after: .change.after, after_unknown: .change.after_unknown}]
-  | sort_by(.address)' "$WORK/plan.json" | sha256sum | cut -d' ' -f1)
+# Canonical, order-independent description of every change, prefixed with the mode; hashed, never
+# published in clear.
+DIGEST=$({
+  printf 'mode=%s\n' "$MODE"
+  jq -S -c '[.resource_changes[]? | select(.change.actions != ["no-op"])
+    | {address, actions: .change.actions, after: .change.after, after_unknown: .change.after_unknown}]
+    | sort_by(.address)' "$WORK/plan.json"
+} | sha256sum | cut -d' ' -f1)
 PLAN_LINE=$(grep -E '^(Plan:|No changes\.)' "$WORK/plan.txt" | head -1 || true)
 
 {
-  echo "## terraform $CMD: $ENV"
+  echo "## terraform $CMD ($MODE): $ENV"
   echo
   echo "- Commit: \`${GITHUB_SHA:-local}\`"
   echo "- Result: **${PLAN_LINE:-see log}**"
@@ -107,12 +129,43 @@ PLAN_LINE=$(grep -E '^(Plan:|No changes\.)' "$WORK/plan.txt" | head -1 || true)
   jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | "| \(.change.actions | join("/")) | `\(.address)` |"' "$WORK/plan.json"
 } >>"$SUMMARY"
 
+if [ "$CMD" = drift ]; then
+  if [ "$rc" -eq 0 ]; then
+    echo "No drift: $ENV matches the code."
+    echo "No drift: real infrastructure matches the code." >>"$SUMMARY"
+    exit 0
+  fi
+  # Report addresses and actions only: no values (a public issue must never carry IDs or variables).
+  {
+    echo "Scheduled drift detection found differences between the code on \`main\` and real infrastructure in **$ENV**."
+    echo
+    echo "- Detected: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "- Commit: \`${GITHUB_SHA:-local}\`"
+    echo "- Result: **${PLAN_LINE:-see run}**"
+    echo
+    echo "| Action | Resource |"
+    echo "|---|---|"
+    jq -r '.resource_changes[]? | select(.change.actions != ["no-op"]) | "| \(.change.actions | join("/")) | `\(.address)` |"' "$WORK/plan.json"
+    echo
+    echo "Nothing was changed. Resolve it: codify the manual change in Terraform (pull request), or restore the"
+    echo "code's state with terraform-plan, review, approve and terraform-apply (docs/rollback-runbook.md section 5)."
+  } >"$WORK/drift.md"
+  cat "$WORK/plan.txt"
+  echo "::warning::Drift detected in $ENV: ${PLAN_LINE:-see plan}"
+  exit 3
+fi
+
 if [ "$CMD" = plan ]; then
   cat "$WORK/plan.txt" # sensitive variables are redacted by Terraform; the account ID is masked by GitHub
   if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "digest=$DIGEST" >>"$GITHUB_OUTPUT"; fi
+  if [ "$MODE" = destroy ]; then
+    next="run **cleanup** with \`plan_digest = $DIGEST\` and \`confirm = destroy-$ENV\`, then approve the \`$ENV\` environment"
+  else
+    next="run **terraform-apply** with \`plan_digest = $DIGEST\`, then approve the \`$ENV\` environment"
+  fi
   {
     echo
-    echo "To apply exactly this plan: run **terraform-apply** with \`plan_digest = $DIGEST\`, then approve the \`$ENV\` environment."
+    echo "To apply exactly this plan: $next."
   } >>"$SUMMARY"
   exit 0
 fi
@@ -125,8 +178,31 @@ if [ "$DIGEST" != "$EXPECTED_DIGEST" ]; then
   echo "now:      $DIGEST" >&2
   exit 1
 fi
-echo "Plan digest matches the reviewed plan. Applying."
+echo "Plan digest matches the reviewed plan. Applying ($MODE)."
 terraform -chdir="$STACK" apply -input=false -no-color -lock-timeout=5m "$WORK/tfplan"
+
+if [ "$MODE" = destroy ]; then
+  # Verify, do not assume: the state must be empty and the environment's load balancer must be gone.
+  left=$(terraform -chdir="$STACK" state list | grep -v '^data\.' | grep -v '\.data\.' || true)
+  if [ -n "$left" ]; then
+    echo "::error::cleanup incomplete, still in state:"
+    echo "$left"
+    exit 1
+  fi
+  if aws elbv2 describe-load-balancers --names "idp-$ENV" >/dev/null 2>&1; then
+    echo "::error::cleanup incomplete: load balancer idp-$ENV still exists"
+    exit 1
+  fi
+  {
+    echo
+    echo "### Cleanup verified"
+    echo "- Terraform state of \`$ENV\` holds no resources."
+    echo "- Load balancer \`idp-$ENV\` no longer exists."
+    echo "- Kept (bootstrap): state bucket, CloudTrail, CI roles, ECR images, budget."
+  } >>"$SUMMARY"
+  echo "Cleanup of $ENV verified."
+  exit 0
+fi
 {
   echo
   echo "### Outputs"

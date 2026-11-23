@@ -111,3 +111,14 @@ def test_refuses_an_image_index(stub, media):
 def test_makefile_builds_without_attestation_index():
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     assert "docker build --provenance=false --sbom=false" in makefile
+
+
+def test_drill_images_get_their_own_tag_and_summary(stub):
+    result = stub(TAG_PREFIX="drill-crash")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"idp/sample-api:drill-crash-{SHA}" in (stub.dir / "calls.log").read_text()
+    assert "Rollback drill image" in (stub.dir / "summary.md").read_text()
+
+
+def test_rejects_unknown_tag_prefixes(stub):
+    assert stub(TAG_PREFIX="latest").returncode == 2

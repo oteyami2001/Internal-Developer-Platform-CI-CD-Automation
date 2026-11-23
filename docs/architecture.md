@@ -54,9 +54,9 @@ flowchart LR
 | Developer experience | Service manifest + JSON Schema + policy validator, generated service catalog, PR template, CODEOWNERS | 🛠️✅ manifest, validator, catalog + [catalog page](service-catalog.md), golden-path template + `scripts/new_service.py`, deploy-request issue form (Phase 6) |
 | Workload | FastAPI sample service, multi-stage non-root image | 🛠️✅ (offline + local container) |
 | CI | `ci.yml` (pytest, Ruff, Bandit, manifest, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov, Trivy, actionlint, zizmor, shellcheck) with a single `ci-ok` gate | 🛠️✅ Phase 2 |
-| CD | `terraform-plan`, `terraform-apply` ☁️ (Phase 4) · `image-build`, `app-deploy` 🛠️✅ (Phase 5) · `drift-detection`, `cleanup` 📋 (Phase 7) | see status |
+| CD | `terraform-plan`, `terraform-apply` ☁️ (Phase 4) · `image-build`, `app-deploy` ☁️ (Phase 5) · `drift-detection`, `cleanup`, `drill-image` 🛠️✅ (Phase 7) | see status |
 | Infrastructure | Terraform bootstrap, environment stack, 9 modules | 🛠️✅ interfaces + guardrail tests · 📋 resources (Phases 3–4) |
-| Operations | Health checks, circuit breaker, alarms, rollback, drift detection | 🛠️ app health/readiness · 📋 the rest |
+| Operations | Health checks, circuit breaker, alarms, rollback, drift detection, cleanup | ☁️ health checks, alarms, digest rollback (Phase 5) · 🛠️✅ breaker drill, drift detection, cleanup (Phase 7) |
 
 ## 3. Environment strategy
 
@@ -170,8 +170,9 @@ sequenceDiagram
 | `terraform-apply.yml` 🛠️ | `workflow_dispatch` (`plan_digest`, main) | apply role / `dev` (required reviewer, `main` only) | Re-plans with the same script, **refuses unless the digest equals the reviewed one**, applies that plan, publishes outputs | Fails closed (non-plan document, malformed digest, wrong account); any drift after review stops the apply; one plan/apply at a time |
 | `image-build.yml` | `push` to `main` (app paths), `workflow_dispatch` | image-push role / (branch `main` subject) | Build, smoke test (read-only FS, UID check), Trivy HIGH/CRITICAL gate, push, record `image@sha256` + SBOM | No `latest` tag, immutable repo, push only after scan passes |
 | `app-deploy.yml` | `workflow_dispatch` (digest) | deploy role / `dev-deploy` (required reviewer) | Copy the latest task-definition revision (Terraform-defined from the validated manifest), change only the image, register it, update the service, wait for that deployment's rollout to COMPLETE, check PRIMARY + healthy targets, write a summary report | Digest must exist in ECR (only image-build can push, after the Trivy gate); circuit-breaker rollback fails the job; never runs Terraform. The runner does not probe `/health` itself (the ALB admits only the operator /32); the ALB health check does |
-| `drift-detection.yml` | `schedule` (weekly), `workflow_dispatch` | plan role / `dev-plan` | `plan -detailed-exitcode`; exit 2 opens or updates an issue with the summary | **Never applies** |
-| `cleanup.yml` | `workflow_dispatch` (typed confirmation) | plan role, then apply role / `dev` | `plan -destroy` of workload resources, reviewer approves, apply that plan, post-cleanup verification (no ALB / tasks / public IPs left) | Bootstrap (state, OIDC, ECR) excluded; protected approval |
+| `drift-detection.yml` 🛠️ | `schedule` (Mon 07:17 UTC), `workflow_dispatch` | plan role / `dev-plan` | `tf_ci.sh drift`: plan; on differences opens or comments on the `drift` issue (addresses and actions only) and fails the run | **Never applies** |
+| `cleanup.yml` 🛠️ | `workflow_dispatch` (`plan_digest`, `confirm = destroy-dev`) | destroy plan via terraform-plan `mode = destroy` (plan role), then apply role / `dev` | Re-plans the destroy, refuses unless the digest matches (the digest covers the mode), destroys, verifies empty state and no `idp-dev` load balancer | Bootstrap (state, OIDC, ECR) excluded; protected approval |
+| `drill-image.yml` 🛠️ | `workflow_dispatch` (main) | image-push role (`ref:refs/heads/main`) | Builds the crash-on-start drill image, proves it crashes, Trivy, pushes `drill-crash-<commit>` | Contains no application code; deploying it is a normal approved app-deploy |
 
 **Deliberate improvements over the previous project** (which this design reviewed, not copied):
 
