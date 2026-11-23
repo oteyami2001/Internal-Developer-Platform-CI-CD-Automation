@@ -27,9 +27,17 @@ been executed, it says so. All times are UTC.
 |---|---|---|
 | Checkov's GitHub Actions scan **silently evaluated 0 checks** on `ci.yml` | Output showed results only for Terraform and Dockerfile; a JSON run reported `resource_count: 0`; bisected to `cancel-in-progress: ${{ … }}` failing Checkov's workflow schema | Literal `cancel-in-progress: true` with a per-commit group on `main`; new `make checkov-guard` (in CI) fails if Checkov evaluates zero workflow checks |
 
-### On GitHub
+### On GitHub: [PR #1](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/pull/1)
 
-Recorded from the pull request's CI runs (see the PR checks and the section below once runs complete).
+| Run | Head | Result | Notes |
+|---|---|---|---|
+| [45096890726](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45096890726) | `e255350` | ❌ `ci-ok` failed (5/6 jobs green) | Workflows job could not install `actionlint-py==1.7.12`: the package uses 4-part versions. **Container job green: Trivy image gate passed on the runner**, so the zlib1g CVE seen only in the sandbox build is fixed (SE-4 closed). Terraform job 2 min 1 s. |
+| [45097129693](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/actions/runs/45097129693) | `b586952` | ✅ all 8 checks green, `ci-ok` success 01:55:28 | Pin fixed (`1.7.12.25`). Terraform job down to 1 min 20 s with the in-run provider cache. Checkov SARIF uploaded, so GitHub code scanning is active |
+
+PR #1 was merged by the owner at 2026-11-23 01:56:42 UTC (merge commit `a4a9438`).
+
+Not yet demonstrated on GitHub: a deliberately insecure Terraform change failing CI (scenario 3).
+It needs its own PR, because PR #1 merged before the demo commit was pushed.
 
 ## Phase 1 — offline validation (2026-11-23)
 
@@ -107,9 +115,9 @@ build (Phase 2) is the authoritative result and must close E15.
 | # | Scenario | Status |
 |---|---|---|
 | 1 | Developer creates a new service from a template | 📋 Phase 6 |
-| 2 | PR triggers tests and security scans | 🛠️ Phase 2 (`ci.yml`); GitHub run results recorded above |
-| 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9); 📋 in CI on a PR |
-| 4 | Container image built and scanned | ✅ locally (E12, E15, finding open); 📋 in CI |
+| 2 | PR triggers tests and security scans | ✅ PR #1, runs 45096890726 (caught a real failure) and 45097129693 (green) |
+| 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9, P2-9); 📋 on a GitHub PR |
+| 4 | Container image built and scanned | ✅ in CI on GitHub (run 45097129693, Trivy gate passed) |
 | 5 | Approved image published to ECR | 📋 Phase 5 |
 | 6 | Authorized deployment updates ECS Fargate | 📋 Phase 5 |
 | 7 | Unapproved deployment is blocked | 📋 Phase 5 |
