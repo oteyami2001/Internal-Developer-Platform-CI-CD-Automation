@@ -19,7 +19,8 @@ case "$1 $2" in
   "ecr get-login-password") echo token ;;
   "ecr describe-images")
     if [ -f "$STUB_DIR/pushed" ] || [ -n "${STUB_ALREADY:-}" ]; then
-      echo "{\\"imageDetails\\": [{\\"imageDigest\\": \\"$STUB_DIGEST\\"}]}"
+      printf '{"imageDetails": [{"imageDigest": "%s", "imageManifestMediaType": "%s"}]}\\n' \\
+        "$STUB_DIGEST" "$STUB_MEDIA"
     else
       echo "ImageNotFoundException" >&2; exit 254
     fi ;;
@@ -54,6 +55,7 @@ def stub(tmp_path):
             "GITHUB_OUTPUT": str(tmp_path / "output"),
             "STUB_DIR": str(tmp_path),
             "STUB_DIGEST": DIGEST,
+            "STUB_MEDIA": "application/vnd.oci.image.manifest.v1+json",
             "AWS_REGION": "us-east-2",
             "IMAGE": "sample-api:build",
             "ECR_REPOSITORY": "idp/sample-api",
@@ -93,3 +95,19 @@ def test_fails_without_a_valid_digest(stub):
 def test_refuses_missing_configuration(stub):
     result = stub(GITHUB_SHA="")
     assert result.returncode == 2
+
+
+@pytest.mark.parametrize(
+    "media", ["application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json"]
+)
+def test_refuses_an_image_index(stub, media):
+    """An index leaves untagged child manifests that ECR's lifecycle rule may expire (found in Phase 5)."""
+    result = stub(STUB_MEDIA=media)
+    assert result.returncode == 1
+    assert "not a single image manifest" in result.stdout
+    assert not (stub.dir / "output").exists()  # no digest published
+
+
+def test_makefile_builds_without_attestation_index():
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "docker build --provenance=false --sbom=false" in makefile

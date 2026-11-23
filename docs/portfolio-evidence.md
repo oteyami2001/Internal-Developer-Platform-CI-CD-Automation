@@ -16,8 +16,21 @@ Approved by the owner 2026-11-23 ([release-runbook.md](release-runbook.md)).
 | P5-A3 | `terraform-apply` run 45134553241, 07:55–07:57, owner approved `dev` | Reviewed digest `d212d307…99493831` matched; `Apply complete! Resources: 10 added, 1 changed, 0 destroyed.`; ECS service steady after 1 min 27 s | ✅ |
 | P5-A4 | `/health` from the operator's browser | `{"status":"ok"}` (was `503` before the release) | ✅ |
 | P5-A5 | CloudWatch (owner screenshot, ~08:01) | 7 alarms, all `OK`; `HealthyHostCount` = 1. `no-healthy-targets` was briefly in ALARM because it was created seconds before the first task started | ✅ |
-| P5-A6 | Drift check, run 45135379914, 08:02 | **Drift found:** `1 to add, 1 to destroy`. The task definition would be replaced because of the defaults ECS stores (defect below) | ❌ → fixed in code, re-check pending |
-| P5-A7 | `app-deploy` release + rejected/unapproved deploy (scenarios 6, 7) | Not run yet | ⏳ |
+| P5-A6 | Drift check, run 45135379914, 08:02 | **Drift found:** `1 to add, 1 to destroy`. The task definition would be replaced because of the defaults ECS stores (defect below) | ❌ → fixed (PR #9) |
+| P5-A6b | Drift check after the fix, run 45139612183, 08:34 | `No changes. Your infrastructure matches the configuration.` | ✅ |
+| P5-A7 | `app-deploy` run 45139839358 (scenario 6), owner approved `dev-deploy` | `Registered idp-dev-sample-api:2`, rollout `IN_PROGRESS` → `COMPLETED` 08:36:44–08:39:07, `Deployed idp-dev-sample-api:2: 1 healthy target(s), 150s.` Role ARN masked | ✅ |
+| P5-A8 | Unapproved/rejected deploy (scenario 7) | Not run yet | ⏳ |
+
+**Defect found in AWS: the image is an index with untagged children.** The owner's ECR screenshot
+showed 3 entries for one push: the tagged `Image Index` (`sha256:09dbd1aa…`, the digest we deploy)
+plus two **untagged** manifests: the amd64 image and a 0-byte BuildKit provenance attestation. Our
+lifecycle rule expires untagged images after 1 day, and the "keep newest N" rule counts every
+manifest. Whether ECR's lifecycle spares the children of a tagged index was not verified. If it
+does not, the running service could fail to pull its own image on the next task restart. Fix:
+`make image` builds with `--provenance=false --sbom=false` (one plain manifest; the SBOM still
+comes from Trivy). `push_image.sh` refuses to publish a digest unless the tag points at a single
+image manifest (tests, mutation-checked). The next build therefore publishes a single manifest,
+and releasing it replaces the index-based image in the service.
 
 **Defect found in AWS: perpetual task-definition replacement.** ECS returns the container
 definition in a normalised form. It adds `hostPort` (= `containerPort` in awsvpc mode) and empty
