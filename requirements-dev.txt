@@ -1,9 +1,9 @@
 # Development and CI tooling (no AWS SDK needed: all tests run offline).
 -r apps/sample-api/requirements.txt
 httpx==0.28.1
-pytest==9.1.1
+pytest==9.2.0
 pytest-cov==7.1.0
 jsonschema==4.26.0
 PyYAML==6.0.3
-ruff==0.16.9
+ruff==0.17.5
 bandit==1.9.4
