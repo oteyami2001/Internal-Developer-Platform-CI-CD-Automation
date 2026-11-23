@@ -30,6 +30,8 @@ terraform/modules/**/.terraform.lock.hcl
 .aws/
 credentials
 credentials.json
+# Output of scripts/aws_discovery.sh (contains the AWS account ID)
+discovery-report*.md
 
 # --- Python ---
 __pycache__/

@@ -48,6 +48,43 @@ Run in a Codespace, so `gh` used the Codespace `GITHUB_TOKEN`:
 | OIDC subject | `use_immutable_subject: true`, prefix `repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837` | Real: used for Phase 3 trust policies |
 | Repository ID | `1465573837` | Real: recorded as the bootstrap default |
 
+### GitHub settings, applied and verified (owner, 2026-11-23)
+
+The owner signed in to `gh` as the repository owner (`unset GITHUB_TOKEN && gh auth login`) and
+applied the `docs/github-settings.md` commands:
+- `default_branch=main`;
+- secret scanning, push protection and Dependabot security updates enabled (the API response confirmed `"status": "enabled"`);
+- Dependabot alerts enabled;
+- workflow token `read` with `can_approve_pull_request_reviews=false`;
+- ruleset `main-protection` created at 02:26:57Z (id 27869781, enforcement `active`, no bypass actors, `current_user_can_bypass: never`).
+
+`scripts/verify_github_settings.sh` at **2026-11-23T02:27:41Z**:
+
+```text
+PASS     default branch
+PASS     secret scanning
+PASS     secret scanning push protection
+PASS     Dependabot alerts
+PASS     Dependabot security updates
+PASS     default GITHUB_TOKEN permissions
+PASS     Actions cannot approve pull requests (can_approve_pull_request_reviews)
+INFO     fork PR workflow approval policy: first_time_contributors
+PASS     main requires a pull request
+PASS     force pushes to main blocked
+PASS     deletion of main blocked
+PASS     status check ci-ok required on main
+INFO     code-owner review NOT required (expected while the project has a single maintainer - SE-5)
+INFO     OIDC subject customization: use_immutable_subject=true, prefix repo:oteyami2001@157901928/Internal-Developer-Platform-CI-CD-Automation@1465573837
+INFO     environments: <none>
+RESULT: all checks passed
+```
+
+GitHub added two ruleset defaults that were not in `main.json`: `require_extra_approval_for_unattributed_changes: true`
+and `allowed_merge_methods: [merge, squash, rebase]`.
+
+Dependabot opened its first PR (#3, Python dev dependencies) at 01:52Z, before the ruleset existed.
+Like every PR, it must now pass `ci-ok` on an up-to-date branch before it can merge.
+
 Not yet demonstrated on GitHub: a deliberately insecure Terraform change failing CI (scenario 3).
 It needs its own PR, because PR #1 merged before the demo commit was pushed.
 

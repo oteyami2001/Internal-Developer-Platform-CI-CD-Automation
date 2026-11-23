@@ -4,7 +4,7 @@ The CI code enforces nothing on its own unless the repository settings make it a
 settings cannot be changed from the build environment, so the owner applies them. Then
 `scripts/verify_github_settings.sh` **reads them back from the API**; the result is the evidence.
 
-Status: 📋 to be applied by the owner, then verified (Phase 2 exit criterion).
+Status: ✅ **applied and verified 2026-11-23T02:27:41Z** (`RESULT: all checks passed`, see portfolio-evidence.md).
 
 > The `gh api -X …` commands below change settings and need owner credentials. In a Codespace,
 > run `unset GITHUB_TOKEN && gh auth login` first (see §5).
