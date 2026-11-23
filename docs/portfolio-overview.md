@@ -62,6 +62,12 @@ and GitHub.
 | Drill image with **fixable HIGH CVEs** | The Trivy gate blocked it, as designed | Same OS patching for every image; hygiene test |
 | Console edit silently changed a **second alarm setting** | Drift drill plan | Restored by the reviewed apply (an argument for drift detection) |
 
+## State today
+
+The dev environment was **removed by the verified cleanup** on 2026-11-23 (47 resources destroyed,
+empty state confirmed). The code, the images in ECR and all evidence remain. Rebuild in about 10 minutes
+with terraform-plan → terraform-apply (two approvals).
+
 ## Cost
 
 All figures are **estimates** from list prices. Offline development costs $0. Dev while running

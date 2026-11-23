@@ -8,7 +8,7 @@ networking or arbitrary AWS resources.
 **Stack:** AWS (ECS Fargate, ECR, ALB, VPC, IAM, CloudWatch, SNS, Budgets) · Terraform · GitHub
 Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
 
-> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 delivery pipeline ☁️ AWS-verified (2026-11-23): approved releases by digest, rejected release blocked. Phase 6 self-service 🛠️✅ (offline). Phase 7 operations ☁️ circuit-breaker rollback and drift drills verified (2026-11-23); cleanup on request.**
+> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 delivery pipeline ☁️ AWS-verified (2026-11-23): approved releases by digest, rejected release blocked. Phase 6 self-service 🛠️✅ (offline). Phase 7 operations ☁️ verified. Phase 8 portfolio complete: all 12 scenarios proven (8 in AWS, 4 in GitHub CI). The dev environment was removed by a verified cleanup (2026-11-23); rebuild with terraform-plan → terraform-apply.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
 > **Short on time? Read the [portfolio overview](docs/portfolio-overview.md) (3 minutes).**
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
@@ -30,7 +30,7 @@ Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · C
 | `ci.yml`: pytest, Ruff, Bandit, manifests, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov (IaC, Dockerfile, Actions, secrets), Trivy (repo + image), actionlint, zizmor, shellcheck; one `ci-ok` gate | ✅ green on GitHub ([PR #1](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/pull/1)) |
 | Workflow security rules as tests (SHA pins, least privilege, no OIDC in CI, no `pull_request_target`, no expression injection) | 🛠️✅ 23 tests |
 | Self-service (Phase 6): `scripts/new_service.py` creates a service from the golden-path template that passes CI unchanged; generated [service catalog](docs/service-catalog.md); deploy-request issue form | 🛠️✅ 17 tests (generated service: manifest, own tests 90% coverage, Ruff), template ≡ reference service, 5/5 mutations caught |
-| Operations (Phase 7): weekly drift detection (reports via issue, never fixes), reviewed + verified cleanup (destroy digest bound to the mode), circuit-breaker drill image | 🛠️✅ 9 drift/cleanup tests, 3 drift-issue tests, 5 workflow rules, 7/7 mutations caught · ☁️ rollback + drift drills ([runbook](docs/rollback-runbook.md), [evidence](docs/portfolio-evidence.md)) · ⏳ cleanup |
+| Operations (Phase 7): weekly drift detection (reports via issue, never fixes), reviewed + verified cleanup (destroy digest bound to the mode), circuit-breaker drill image | 🛠️✅ 9 drift/cleanup tests, 3 drift-issue tests, 5 workflow rules, 7/7 mutations caught · ☁️ rollback + drift drills ([runbook](docs/rollback-runbook.md), [evidence](docs/portfolio-evidence.md)) · ☁️ cleanup (47 destroyed, verified) |
 
 ## Architecture
 

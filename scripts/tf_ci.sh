@@ -135,6 +135,13 @@ if [ "$CMD" = drift ]; then
     echo "No drift: real infrastructure matches the code." >>"$SUMMARY"
     exit 0
   fi
+  # After an approved cleanup the state is empty and the plan wants to create everything: that is
+  # "not deployed", not drift (found after the Phase 8 cleanup; it would open a false issue weekly).
+  if [ -z "$(terraform -chdir="$STACK" state list 2>/dev/null | grep -v -E '(^|\.)data\.' || true)" ]; then
+    echo "Environment $ENV is not deployed (empty state): nothing to compare."
+    echo "Environment not deployed (empty state, e.g. after cleanup): nothing to compare." >>"$SUMMARY"
+    exit 0
+  fi
   # Report addresses and actions only: no values (a public issue must never carry IDs or variables).
   {
     echo "Scheduled drift detection found differences between the code on \`main\` and real infrastructure in **$ENV**."
