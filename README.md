@@ -8,7 +8,7 @@ networking or arbitrary AWS resources.
 **Stack:** AWS (ECS Fargate, ECR, ALB, VPC, IAM, CloudWatch, SNS, Budgets) · Terraform · GitHub
 Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
 
-> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 (image build and deploy) approved: code and tests done, first release pending.**
+> **Project status: Phase 3 bootstrap and Phase 4 dev infrastructure ☁️ AWS-verified (2026-11-23). Phase 5 delivery pipeline ☁️ AWS-verified (2026-11-23): approved releases by digest, rejected release blocked. Next: Phase 6.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
 > Target: the AIOps project's AWS account in us-east-2, shared with that project's retained
@@ -25,7 +25,7 @@ Actions + OIDC · Python 3.13/FastAPI · Docker · pytest · Ruff · Bandit · C
 | Terraform: single environment stack + dev/staging/prod data, account and region guards (us-east-2 only), ingress/HTTPS/retention/budget validation | 🛠️✅ 15 `terraform test` runs (mocked AWS) |
 | Bootstrap (Phase 3): state bucket, CloudTrail, 4 OIDC roles, permissions boundary, ECR, budget; modules `iam-oidc`, `security`, `ecr`, `budgets` implemented | 🛠️✅ 23 `terraform test` runs + 10/10 mutations caught · ⏳ owner applies via [bootstrap-runbook.md](docs/bootstrap-runbook.md) |
 | Dev environment (Phase 4): network, ALB, ECS cluster, observability; `terraform-plan` / `terraform-apply` with a reviewed-plan **digest gate** | 🛠️✅ 41 module/stack tests, 23 gate tests (mutation-tested) · ☁️ 37 resources applied, no drift ([evidence](docs/portfolio-evidence.md)) |
-| Delivery (Phase 5): `image-build` (smoke, Trivy gate, SBOM, immutable tag, digest) and `app-deploy` (approval, digest only, image-only revision, rollout + health verification); Terraform refuses to delete the running service | 🛠️✅ 36 new script/workflow tests, 7/7 mutations caught · ⏳ first release ([runbook](docs/release-runbook.md)) |
+| Delivery (Phase 5): `image-build` (smoke, Trivy gate, SBOM, immutable tag, digest) and `app-deploy` (approval, digest only, image-only revision, rollout + health verification); Terraform refuses to delete the running service | 🛠️✅ script/workflow tests, mutation-tested · ☁️ 3 approved releases, 1 rejected ([runbook](docs/release-runbook.md), [evidence](docs/portfolio-evidence.md)) |
 | `ci.yml`: pytest, Ruff, Bandit, manifests, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov (IaC, Dockerfile, Actions, secrets), Trivy (repo + image), actionlint, zizmor, shellcheck; one `ci-ok` gate | ✅ green on GitHub ([PR #1](https://github.com/oteyami2001/Internal-Developer-Platform-CI-CD-Automation/pull/1)) |
 | Workflow security rules as tests (SHA pins, least privilege, no OIDC in CI, no `pull_request_target`, no expression injection) | 🛠️✅ 23 tests |
 | Developer self-service, drift detection, cleanup, rollback drills | 📋 Phases 6–7 |
