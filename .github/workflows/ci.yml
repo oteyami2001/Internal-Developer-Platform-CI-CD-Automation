@@ -1,0 +1,236 @@
+# Continuous integration: runs on every pull request and on pushes to main.
+#
+# Security properties (asserted by tests/platform/test_repo_hygiene.py):
+#   - NO AWS credentials and no `id-token: write`: safe for any PR, including forks. Nothing here
+#     can read Terraform state or change AWS (ADR 0003).
+#   - Workflow-level `permissions: {}`; each job requests only what it needs.
+#   - Every third-party action is pinned to a full commit SHA (tag in the trailing comment) and
+#     verified against the upstream tag; Dependabot proposes bumps as PRs.
+#   - `defaults.run.shell: bash` => `bash --noprofile --norc -eo pipefail`, so a failing command
+#     inside a pipe fails the step (lesson from the previous project and from Phase 1).
+#   - No `${{ }}` expressions interpolated into shell scripts (template-injection safe).
+#
+# The single required status check for branch protection is the `ci-ok` job.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+# PRs: a new push cancels the PR's previous run. main: the group is unique per commit, so main runs
+# never cancel each other. cancel-in-progress must be a literal: an expression there makes Checkov's
+# workflow schema check silently skip the whole file (found in Phase 2; guarded by `make checkov-guard`).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  TF_VERSION: 1.17.2
+  TFLINT_VERSION: v0.66.0
+  TRIVY_VERSION: v0.76.2
+  CHECKPOINT_DISABLE: "1"
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  python:
+    name: Python - lint, SAST, tests, manifests, catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install tooling
+        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+      - name: Ruff + Bandit
+        run: make lint
+      - name: Unit tests (coverage gate 90%)
+        run: |
+          mkdir -p reports
+          python -m pytest --cov --cov-report=term --cov-report=xml:reports/coverage.xml --junitxml=reports/junit.xml
+      - name: Validate service manifests
+        run: make validate-services
+      - name: Service catalog is up to date
+        run: make catalog-check
+      - name: Job summary
+        if: always()
+        run: |
+          if [ ! -f reports/junit.xml ]; then
+            echo "## Unit tests did not run (an earlier step failed)" >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          python - >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import xml.etree.ElementTree as ET
+          s = ET.parse("reports/junit.xml").getroot()
+          s = s if s.tag == "testsuite" else s[0]
+          print("## Unit tests")
+          print(f"tests={s.get('tests')} failures={s.get('failures')} errors={s.get('errors')} skipped={s.get('skipped')} time={s.get('time')}s")
+          try:
+              c = ET.parse("reports/coverage.xml").getroot()
+              print(f"\nline coverage: {float(c.get('line-rate')) * 100:.1f}%")
+          except FileNotFoundError:
+              pass
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: python-test-reports
+          path: reports/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  workflows:
+    name: GitHub Actions + shell - actionlint, zizmor, shellcheck, Checkov guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install linters
+        run: python -m pip install --disable-pip-version-check actionlint-py==1.7.12 zizmor==1.33.1 checkov==3.4.6
+      - name: actionlint + zizmor
+        run: make lint-workflows
+      - name: Checkov really parsed the workflows (guards against silent schema skips)
+        run: make checkov-guard
+
+  terraform:
+    name: Terraform - fmt, validate, test, env data, TFLint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: terraform fmt
+        run: make tf-fmt
+      - name: validate + offline tests (mocked AWS provider, read-only lock files)
+        run: make tf-test
+      - name: Environment data files pass the stack guardrails
+        run: make tf-env-data
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+      - name: TFLint
+        env:
+          # Authenticated plugin download (unauthenticated GitHub API calls are rate-limited).
+          GITHUB_TOKEN: ${{ github.token }}
+        run: make tflint
+
+  checkov:
+    name: Checkov - IaC, Dockerfile, Actions, secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@b17b606d6ec72bb8ba5721ad5b7e340b80a9fc39 # v12.3142.0
+        with:
+          directory: .
+          framework: terraform,dockerfile,github_actions,secrets
+          skip_path: \.terraform
+          quiet: true
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+          soft_fail: false # any finding without an inline, justified skip fails the build
+          download_external_modules: false
+      - uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        if: always() && hashFiles('checkov.sarif') != ''
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+
+  trivy-fs:
+    name: Trivy - dependencies, misconfig, secrets (repo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  container:
+    name: Container - build, hardened smoke test, Trivy image gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      IMAGE: sample-api:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build image
+        run: make image
+      - name: Smoke test (read-only FS, no capabilities, UID 10001, graceful stop)
+        run: make smoke
+      - name: Trivy image scan (HIGH/CRITICAL with a fix available fails the build)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  ci-ok:
+    # Single required status check: branch protection requires only this job, so adding or
+    # renaming jobs never silently drops a check from the merge gate.
+    name: ci-ok
+    if: always()
+    needs: [python, workflows, terraform, checkov, trivy-fs, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: All CI jobs succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for r in $RESULTS; do
+            if [ "$r" != "success" ]; then echo "::error::a required CI job did not succeed ($r)"; exit 1; fi
+          done

@@ -1,0 +1,24 @@
+# TFLint configuration (CI: .github/workflows/ci.yml, `tflint --recursive`).
+config {
+  call_module_type = "local"
+}
+
+plugin "terraform" {
+  enabled = true
+  preset  = "recommended"
+}
+
+plugin "aws" {
+  enabled = true
+  version = "0.50.0"
+  source  = "github.com/terraform-linters/tflint-ruleset-aws"
+}
+
+# Stricter than the recommended preset: every input and output must say what it is for.
+rule "terraform_documented_outputs" {
+  enabled = true
+}
+
+rule "terraform_naming_convention" {
+  enabled = true
+}

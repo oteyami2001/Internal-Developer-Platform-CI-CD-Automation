@@ -1,3 +1,6 @@
+# tflint-ignore-file: terraform_unused_declarations # SKELETON: inputs are the contract; resources arrive in Phase 3/4.
+# Remove this line when the configuration gets resources (enforced by tests/platform/test_repo_hygiene.py).
+
 # One root configuration shared by dev, staging and prod. Environments differ ONLY in data
 # (terraform/envs/<env>/terraform.tfvars + backend.hcl), which keeps them structurally identical:
 # what is tested in dev is what is promoted to prod.

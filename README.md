@@ -8,7 +8,7 @@ networking or arbitrary AWS resources.
 **Stack:** AWS (ECS Fargate, ECR, ALB, VPC, IAM, CloudWatch, SNS, Budgets) · Terraform · GitHub
 Actions + OIDC · Python/FastAPI · Docker · pytest · Ruff · Bandit · Checkov · TFLint · Trivy
 
-> **Project status: Phase 1 complete (offline). Nothing is deployed to AWS.**
+> **Project status: Phase 2 (CI and security automation) in review. Nothing is deployed to AWS.**
 > Legend: 📋 Planned · 🛠️ Implemented · ✅ Tested offline · ☁️ AWS-verified.
 > Evidence: [docs/portfolio-evidence.md](docs/portfolio-evidence.md).
 > Target: the AIOps project's AWS account in us-east-2, shared with that project's retained
@@ -24,7 +24,9 @@ Actions + OIDC · Python/FastAPI · Docker · pytest · Ruff · Bandit · Checko
 | Generated service catalog with staleness check | 🛠️✅ |
 | Terraform: single environment stack + dev/staging/prod data, account and region guards (us-east-2 only), ingress/HTTPS/retention/budget validation | 🛠️✅ 15 `terraform test` runs (mocked AWS) |
 | Terraform module interfaces (9 modules), ecs-service digest-only images | 🛠️✅ 7 contract tests · 📋 resources |
-| CI/CD workflows, OIDC roles, ECR, ECS deployment, monitoring, rollback, drift, cleanup | 📋 Phases 2–7 |
+| `ci.yml`: pytest, Ruff, Bandit, manifests, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov (IaC, Dockerfile, Actions, secrets), Trivy (repo + image), actionlint, zizmor, shellcheck; one `ci-ok` gate | 🛠️✅ locally · results on GitHub: see portfolio-evidence.md |
+| Workflow security rules as tests (SHA pins, least privilege, no OIDC in CI, no `pull_request_target`, no expression injection) | 🛠️✅ 23 tests |
+| Deployment workflows, OIDC roles, ECR, ECS deployment, monitoring, rollback, drift, cleanup | 📋 Phases 3–7 |
 
 ## Architecture
 
@@ -74,8 +76,9 @@ make check
 make image smoke
 ```
 
-`make help` lists every target. `make check` runs Ruff, Bandit, pytest (90% coverage gate),
-manifest validation, catalog check, `terraform fmt/validate/test` and Checkov.
+`make help` lists every target. `make check` runs everything CI runs except the image build and
+Trivy: Ruff, Bandit, pytest (90% coverage gate), actionlint, zizmor, shellcheck, manifest
+validation, catalog check, `terraform fmt/validate/test`, environment-data tests, TFLint, and Checkov.
 
 ## Documentation
 
@@ -90,6 +93,7 @@ manifest validation, catalog check, `terraform fmt/validate/test` and Checkov.
 | [rollback-runbook.md](docs/rollback-runbook.md) | Circuit breaker, digest rollback, infra revert, drift, cleanup |
 | [portfolio-evidence.md](docs/portfolio-evidence.md) | Timestamped test results and defects found |
 | [phase-0-assessment.md](docs/phase-0-assessment.md) | Repository, reference-project and tooling assessment |
+| [github-settings.md](docs/github-settings.md) | Branch ruleset, secret scanning, Actions defaults: apply + verify |
 | [docs/adr/](docs/adr) | Architecture decision records |
 
 ## Cost

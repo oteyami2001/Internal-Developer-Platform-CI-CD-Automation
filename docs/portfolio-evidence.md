@@ -3,6 +3,34 @@
 Real, timestamped results only. No metric here is estimated or invented. Where something has not
 been executed, it says so. All times are UTC.
 
+## Phase 2 — CI and security automation (2026-11-23)
+
+### Local validation (before the first GitHub run)
+
+| # | Check | Result | Time (UTC) |
+|---|---|---|---|
+| P2-1 | `make check` (now also: actionlint, zizmor, shellcheck, Checkov guard, TFLint, env data) | ✅ exit 0 | 01:43:38–01:46:02 |
+| P2-2 | pytest (incl. 23 repo-hygiene tests) | ✅ 101 passed | 01:46 |
+| P2-3 | Terraform tests: stack 15, ecs-service 7, env data dev/staging/prod 1 each | ✅ all passed | 01:46 |
+| P2-4 | TFLint 0.66.0 + AWS ruleset 0.50.0 (both built from source here) | ✅ 0 issues (92 skeleton `unused_declarations` scoped away, SE-7) | 01:46 |
+| P2-5 | actionlint 1.7.12, zizmor 1.33.1 | ✅ no findings | 01:46 |
+| P2-6 | Checkov `github_actions` | ✅ 156 passed, 0 failed (after fixing a silent skip, see below) | ~01:50 |
+| P2-7 | shellcheck (warning level) on `scripts/*.sh` | ✅ clean | ~01:55 |
+| P2-8 | Hygiene mutation test: unpinned action + `id-token: write` in CI + `${{ github.event.pull_request.title }}` in `run:` | ✅ 3 targeted tests failed as intended; file restored | ~01:41 |
+| P2-9 | Bad environment data (`log_retention_days = 365` in dev) | ✅ rejected: `Invalid value for variable` | ~01:30 |
+| P2-10 | Action SHAs verified against upstream tags (`git ls-remote`, peeled for annotated tags) | ✅ 8/8 match; all are the latest releases | 01:13 |
+| P2-11 | Provider lock files: 5 platforms, zips checked against HashiCorp SHA256SUMS | ✅ | ~01:35 |
+
+### Defect found in Phase 2
+
+| Defect | How it was found | Fix |
+|---|---|---|
+| Checkov's GitHub Actions scan **silently evaluated 0 checks** on `ci.yml` | Output showed results only for Terraform and Dockerfile; a JSON run reported `resource_count: 0`; bisected to `cancel-in-progress: ${{ … }}` failing Checkov's workflow schema | Literal `cancel-in-progress: true` with a per-commit group on `main`; new `make checkov-guard` (in CI) fails if Checkov evaluates zero workflow checks |
+
+### On GitHub
+
+Recorded from the pull request's CI runs (see the PR checks and the section below once runs complete).
+
 ## Phase 1 — offline validation (2026-11-23)
 
 Environment: Linux build container, Python 3.13.18, Terraform 1.17.2, AWS provider 6.73.0
@@ -79,7 +107,7 @@ build (Phase 2) is the authoritative result and must close E15.
 | # | Scenario | Status |
 |---|---|---|
 | 1 | Developer creates a new service from a template | 📋 Phase 6 |
-| 2 | PR triggers tests and security scans | 📋 Phase 2 (offline equivalent ✅ E1) |
+| 2 | PR triggers tests and security scans | 🛠️ Phase 2 (`ci.yml`); GitHub run results recorded above |
 | 3 | Insecure Terraform change fails validation | ✅ offline (E8, E9); 📋 in CI on a PR |
 | 4 | Container image built and scanned | ✅ locally (E12, E15, finding open); 📋 in CI |
 | 5 | Approved image published to ECR | 📋 Phase 5 |
