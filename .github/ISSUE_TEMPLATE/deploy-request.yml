@@ -1,0 +1,70 @@
+# Self-service deployment request (Phase 6). Filing this issue changes nothing by itself: it is the
+# written request a platform owner acts on. The deployment still runs only through app-deploy.yml,
+# by image DIGEST, after the `dev-deploy` environment is approved (required reviewer, main only).
+# Nothing here is read by a workflow: issue text in a public repository is untrusted input.
+name: Deploy request
+description: Ask the platform owner to release a published image of a service to an environment.
+title: "Deploy: <service> to <environment>"
+labels: ["deploy-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use the digest from the **image-build** run summary (`sha256:` + 64 hex characters). Tags such as `latest` are refused.
+        Do not paste secrets, credentials, account IDs or IP addresses into this public issue.
+  - type: input
+    id: service
+    attributes:
+      label: Service
+      description: Name from docs/service-catalog.md
+      placeholder: sample-api
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Only dev is enabled today (staging and prod are planned).
+      options:
+        - dev
+    validations:
+      required: true
+  - type: input
+    id: digest
+    attributes:
+      label: Image digest
+      placeholder: sha256:5e3b3b4b36ca9aa26a7076dd0d74dc90b365ecdeb413d916f4996dc2f609413d
+    validations:
+      required: true
+  - type: input
+    id: build_run
+    attributes:
+      label: image-build run
+      description: Link to the successful image-build run that published this digest.
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: What changes
+      description: The merged pull request(s) and what a user will notice.
+    validations:
+      required: true
+  - type: input
+    id: rollback
+    attributes:
+      label: Rollback digest
+      description: The digest currently running (from the last app-deploy summary). Releasing it again is the rollback.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: The pull request was merged to main with ci-ok green.
+          required: true
+        - label: The image-build run passed its smoke test and Trivy gate.
+          required: true
+        - label: I will check /health and /version after the release.
+          required: true

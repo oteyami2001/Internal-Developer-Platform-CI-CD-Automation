@@ -1,0 +1,14 @@
+# Test configuration of THIS service only. Every service under apps/ is tested on its own
+# (`make test-apps`): all services use the package name `app`, so they cannot share one test session.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers -p no:cacheprovider"
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true

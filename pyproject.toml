@@ -5,13 +5,15 @@ description = "Self-service Internal Developer Platform on AWS (ECS Fargate, Ter
 requires-python = ">=3.13,<3.14" # project standard: Python 3.13 (ADR 0006)
 
 [tool.pytest.ini_options]
-testpaths = ["apps/sample-api/tests", "tests"]
-pythonpath = ["apps/sample-api", "scripts"]
+# Platform tests only. Each service under apps/ has its own pyproject.toml and is tested on its own
+# (`make test-apps`), because every service uses the package name `app`.
+testpaths = ["tests"]
+pythonpath = ["scripts"]
 addopts = "-ra --strict-markers"
 
 [tool.coverage.run]
 branch = true
-source = ["app", "validate_service", "generate_catalog"]
+source = ["validate_service", "generate_catalog", "new_service"]
 
 [tool.coverage.report]
 fail_under = 90
@@ -32,4 +34,4 @@ known-first-party = ["app"]
 "**/tests/**" = ["S101", "PLR0913"]
 
 [tool.bandit]
-exclude_dirs = ["tests", "apps/sample-api/tests", ".venv"]
+exclude_dirs = ["tests", ".venv"]

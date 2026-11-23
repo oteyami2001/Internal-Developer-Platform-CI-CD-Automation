@@ -51,7 +51,7 @@ flowchart LR
 
 | Layer | Components | Status |
 |---|---|---|
-| Developer experience | Service manifest + JSON Schema + policy validator, generated service catalog, PR template, CODEOWNERS | 🛠️✅ (manifest, validator, catalog) · 📋 (repository template, deploy-request issue form: Phase 6) |
+| Developer experience | Service manifest + JSON Schema + policy validator, generated service catalog, PR template, CODEOWNERS | 🛠️✅ manifest, validator, catalog + [catalog page](service-catalog.md), golden-path template + `scripts/new_service.py`, deploy-request issue form (Phase 6) |
 | Workload | FastAPI sample service, multi-stage non-root image | 🛠️✅ (offline + local container) |
 | CI | `ci.yml` (pytest, Ruff, Bandit, manifest, catalog, Terraform fmt/validate/test/env data, TFLint, Checkov, Trivy, actionlint, zizmor, shellcheck) with a single `ci-ok` gate | 🛠️✅ Phase 2 |
 | CD | `terraform-plan`, `terraform-apply` ☁️ (Phase 4) · `image-build`, `app-deploy` 🛠️✅ (Phase 5) · `drift-detection`, `cleanup` 📋 (Phase 7) | see status |

@@ -152,11 +152,22 @@ def test_committed_tfvars_hold_no_identifying_values():
 PYTHON_STANDARD = "3.13"
 
 
-def test_dockerfile_stages_use_digest_pinned_python_standard():
-    froms = re.findall(r"^FROM\s+(\S+)", (ROOT / "apps" / "sample-api" / "Dockerfile").read_text(), re.M)
+DOCKERFILES = sorted([*(ROOT / "apps").glob("*/Dockerfile"), *(ROOT / "platform" / "templates").glob("*/Dockerfile")])
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=lambda p: p.parent.name)
+def test_dockerfile_stages_use_digest_pinned_python_standard(dockerfile):
+    froms = re.findall(r"^FROM\s+(\S+)", dockerfile.read_text(), re.M)
     assert froms, "no FROM lines"
     for image in froms:
         assert re.fullmatch(rf"python:{re.escape(PYTHON_STANDARD)}-slim@sha256:[0-9a-f]{{64}}", image), image
+
+
+def test_every_service_and_template_is_covered_by_dependabot():
+    config = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+    for ecosystem in ("pip", "docker"):
+        update = next(u for u in config["updates"] if u["package-ecosystem"] == ecosystem)
+        assert {"/apps/*", "/platform/templates/*"} <= set(update["directories"]), ecosystem
 
 
 def test_ci_python_version_is_the_standard():
@@ -294,6 +305,18 @@ def test_configuration_script_stores_identifying_values_as_secrets():
     assert set(re.findall(r"^gh variable set (\w+)", script, re.M)) <= PUBLIC_VARIABLES
     for name in ("AWS_ROLE_ARN", "TF_STATE_BUCKET", "AWS_IMAGE_PUSH_ROLE_ARN", "ALLOWED_INGRESS_CIDR", "ALERT_EMAIL"):
         assert re.search(rf"^\s*gh secret set {name}\b", script, re.M), name
+
+
+def test_deploy_request_form_is_a_request_not_a_trigger():
+    form = yaml.safe_load((ROOT / ".github" / "ISSUE_TEMPLATE" / "deploy-request.yml").read_text(encoding="utf-8"))
+    fields = {item.get("id"): item for item in form["body"] if "id" in item}
+    assert {"service", "environment", "digest", "rollback"} <= set(fields)
+    assert all(fields[f]["validations"]["required"] for f in ("service", "environment", "digest", "rollback"))
+    # Issue text in a public repository is untrusted: no workflow may run on issue events.
+    for path in WORKFLOWS:
+        on = load_workflow(path)["on"]
+        triggers = set(on) if isinstance(on, dict) else {on}
+        assert not triggers & {"issues", "issue_comment"}, f"{path.name} must not run on issue events"
 
 
 CIDR = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})/\d{1,2}(?![\d.])")

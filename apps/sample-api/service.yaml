@@ -6,7 +6,7 @@ kind: Service
 metadata:
   name: sample-api
   owner: team-platform
-  description: Reference FastAPI workload used to demonstrate the platform's delivery pipeline.
+  description: "Reference FastAPI workload used to demonstrate the platform's delivery pipeline."
   tier: experimental
   tags:
     cost-center: platform-demo
