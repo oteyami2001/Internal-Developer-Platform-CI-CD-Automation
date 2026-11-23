@@ -106,7 +106,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install linters
-        run: python -m pip install --disable-pip-version-check actionlint-py==1.7.12 zizmor==1.33.1 checkov==3.4.6
+        run: python -m pip install --disable-pip-version-check actionlint-py==1.7.12.25 zizmor==1.33.1 checkov==3.4.6
       - name: actionlint + zizmor
         run: make lint-workflows
       - name: Checkov really parsed the workflows (guards against silent schema skips)
@@ -118,6 +118,12 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    env:
+      # One provider download per run instead of one per directory (11 directories). In-run only:
+      # no cross-run cache, so nothing can be poisoned. Root configs still verify every package
+      # against their committed lock file (-lockfile=readonly); module lock files are throwaway.
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugin-cache
+      TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -128,6 +134,8 @@ jobs:
           terraform_wrapper: false
       - name: terraform fmt
         run: make tf-fmt
+      - name: Create provider cache directory
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
       - name: validate + offline tests (mocked AWS provider, read-only lock files)
         run: make tf-test
       - name: Environment data files pass the stack guardrails
